@@ -63,16 +63,32 @@ function toast(msg) {
   setTimeout(() => t.remove(), 6000);
 }
 
-async function poll() {
-  try { render(await (await fetch('/api/top10')).json()); } catch { setLive(false, 'Offline — retrying'); }
+// Static hosting (no Node server): poll the JSON file the scheduled build publishes.
+async function pollStatic() {
+  try {
+    const data = await (await fetch('data/top10.json', { cache: 'no-store' })).json();
+    const before = new Set(lastIds || []);
+    const changes = lastIds
+      ? data.stories.filter((s) => !before.has(s.id)).map((s) => ({ type: 'entered', id: s.id, headline: s.headline, rank: s.rank }))
+      : [];
+    render(data, changes);
+  } catch { setLive(false, 'Offline — retrying'); }
 }
 
-function connect() {
-  if (!window.EventSource) { poll(); setInterval(poll, 60000); return; }
-  const es = new EventSource('/events');
+function connectSSE() {
+  const es = new EventSource('events');
   es.addEventListener('hello', (e) => render(JSON.parse(e.data)));
   es.addEventListener('update', (e) => { const d = JSON.parse(e.data); render(d, d.changes); });
   es.onerror = () => setLive(false, 'Reconnecting…');
   es.onopen = () => setLive(true, 'Live');
 }
-connect();
+
+async function start() {
+  let hasServer = false;
+  try { hasServer = window.EventSource && (await fetch('api/top10')).ok; } catch {}
+  if (hasServer) return connectSSE();
+  pollStatic();
+  setInterval(pollStatic, 60000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) pollStatic(); });
+}
+start();

@@ -1,0 +1,46 @@
+name: Top10News site
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['top10news/**', '.github/workflows/top10news.yml']
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: top10news-pages
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Test
+        working-directory: top10news
+        run: npm test
+      - name: Fetch previous data (keeps ranks and change history)
+        run: curl -fsS "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/top10.json" -o "$RUNNER_TEMP/prev.json" || true
+      - name: Build
+        working-directory: top10news
+        env:
+          PREV_JSON: ${{ runner.temp }}/prev.json
+        run: node scripts/build-static.js
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: top10news/dist
+      - id: deploy
+        uses: actions/deploy-pages@v4

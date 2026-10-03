@@ -66,3 +66,14 @@ test('failed sources are reported but do not break the page', async () => {
   assert.equal(snap.sources.filter((s) => s.ok).length, 1);
   assert.equal(snap.stories.length, 1);
 });
+
+test('restore resumes ids and records changes between builds', async () => {
+  const a = new Aggregator({ sources: SOURCES, fetchText: makeDemoFetch() });
+  await a.refresh();
+  const saved = JSON.parse(JSON.stringify(a.publicSnapshot()));
+  const b = new Aggregator({ sources: SOURCES, fetchText: makeDemoFetch() });
+  b.restore(saved);
+  const snap = await b.refresh();
+  const kept = snap.stories.filter((s) => saved.stories.some((t) => t.id === s.id));
+  assert.ok(kept.length >= 8);
+});

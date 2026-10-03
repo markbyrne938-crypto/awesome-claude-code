@@ -12,6 +12,19 @@ npm test
 
 Env vars: `PORT` (3000), `POLL_SECONDS` (120), `DEMO=1`.
 
+## Putting it online
+**GitHub Pages (no server, free):** `.github/workflows/top10news.yml` rebuilds the site every 5 minutes on GitHub's
+servers (which can reach the news feeds) and publishes it. After this branch is merged to `main`:
+1. Repo **Settings → Pages → Source: GitHub Actions**.
+2. Run the "Top10News site" workflow once (Actions tab → Run workflow).
+The site appears at `https://<user>.github.io/<repo>/` and its page checks for new data every minute and flags new entrants.
+(GitHub only runs scheduled workflows from the default branch, and may delay them a few minutes.)
+
+**Any Node host (true push updates):** `npm start`, or build the included `Dockerfile` (Fly.io, Render, Railway, a VPS…).
+The page detects the server and uses the live `/events` stream instead of polling.
+
+Preview the static build locally: `DEMO=1 node scripts/build-static.js && npx serve dist`.
+
 ## How it works
 - `lib/sources.js` – feed list and weights (wires 1.5, outlets 1.0, NPR/DW/France 24 0.8).
 - `lib/cluster.js` – groups headlines about the same event (TF-IDF cosine similarity).
