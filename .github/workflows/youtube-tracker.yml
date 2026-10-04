@@ -1,4 +1,6 @@
 name: YouTube tracker website
+# GitHub's own cron is best-effort (and doesn't reliably fire at all in forks), so each run
+# starts the next one ~10 minutes later. The cron line is only a backup to restart the chain.
 on:
   schedule:
     - cron: "*/10 * * * *"
@@ -10,6 +12,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  actions: write
 concurrency:
   group: youtube-tracker
   cancel-in-progress: false
@@ -38,3 +41,19 @@ jobs:
         with: { path: site }
       - id: deploy
         uses: actions/deploy-pages@v4
+
+  next:
+    # Runs even if the build failed, so one bad run (e.g. YouTube hiccup) never ends the chain.
+    needs: build
+    if: ${{ always() && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait until 10 minutes after this run started
+        run: |
+          start=$(date -d "${{ github.run_started_at }}" +%s)
+          wait=$(( start + 590 - $(date +%s) ))
+          [ "$wait" -gt 0 ] && sleep "$wait" || true
+      - name: Start the next run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run youtube-tracker.yml --repo "${{ github.repository }}" --ref main
