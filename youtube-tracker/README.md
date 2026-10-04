@@ -13,5 +13,10 @@ Click **Refresh** to check for new uploads (or run `python3 fetch_videos.py`).
 Edit `channels.json`. On first run each channel name is searched on YouTube and the matched channel ID is saved
 (the log prints the matched channel name — check they're right). If one is wrong, put the correct `"id": "UC..."` in.
 
-## Automatic updates (optional)
-`.github/workflows/youtube-tracker.yml` refreshes `videos.json` hourly and commits it; serve the folder with GitHub Pages to use it from your phone. Note ticks live in each browser's storage, not synced between devices.
+## Put it online (free, updates itself)
+1. Merge this branch into your repo's `main` branch.
+2. In the repo go to **Settings → Pages → Source** and choose **GitHub Actions**.
+3. Go to the **Actions** tab, open **YouTube tracker website** and click **Run workflow**.
+4. After a minute your site is live at `https://<your-username>.github.io/<repo-name>/` (shown in the workflow run). Bookmark it on your phone.
+
+The site re-checks YouTube every hour. Ticks are stored in each browser/device separately.
