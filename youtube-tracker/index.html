@@ -79,7 +79,7 @@
 <header>
   <div class="bar">
     <div class="grow"><h1>📺 My YouTube Watchlist</h1><div class="sub" id="status">Loading…</div></div>
-    <button id="backupBtn" title="Save or restore your watched list">Backup</button>
+    <button id="backupBtn" title="Sync your ticks between devices, or back them up">☁ Sync</button>
     <button id="refresh" class="primary">↻ Refresh</button>
   </div>
   <div class="bar">
@@ -99,7 +99,11 @@
 <div id="warn" class="warn" hidden>⚠️ This browser isn't saving your ticks (private browsing?). Use a normal tab, or tap Backup to save them.</div>
 <main id="list"></main>
 <dialog id="backup">
-  <h3>Backup your watched list</h3>
+  <h3>Sync across devices</h3>
+  <p class="sub">Your ticks are saved online under a private random code that is part of this page's address. <b>Bookmark this exact address</b> (or add it to your Home Screen). Open it on any device to see the same ticks, even if the browser forgets its data.</p>
+  <input id="syncLink" readonly style="width:100%;font:13px ui-monospace,monospace;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)">
+  <div class="row"><button id="copyLink" class="primary">Copy address</button><span class="sub" id="linkCopied"></span></div>
+  <h3>Backup code</h3>
   <p class="sub">Your ticks live in this browser. To move them to another device or browser (or keep a safety copy), copy this code and paste it into Backup → Restore there.</p>
   <textarea id="code" readonly rows="4"></textarea>
   <div class="row"><button id="copy" class="primary">Copy code</button><span class="sub" id="copied"></span></div>
@@ -107,31 +111,100 @@
   <textarea id="restoreCode" rows="3" placeholder="Paste a backup code here"></textarea>
   <div class="row"><button id="restore">Restore</button><span class="sub" id="restored"></span><button id="closeBackup" style="margin-left:auto">Close</button></div>
 </dialog>
-<footer>Ticks are saved in this browser only. New uploads are checked automatically every hour.</footer>
+<footer>Ticks are saved on this device and synced online (tap ☁ Sync). New uploads are checked about every 10 minutes.<br><span id="syncStatus"></span></footer>
 <div class="toast" id="toast"><span id="toastMsg"></span><button id="undo">Undo</button></div>
 <script>
 const $ = id => document.getElementById(id);
 let watched = new Set(), data = { channels: [] }, prefs = { view: 'new', filter: 'all', length: 'any' }, lastAction = null, toastTimer;
-const WKEY = 'yt-watched', MAX_WATCHED = 5000;
+const WKEY = 'yt-watched', MKEY = 'yt-marks', SKEY = 'yt-sync-key', KEEP_MS = 90 * 864e5;
+// Every tick/untick is a "mark": id -> [1 = watched / 0 = not, time ms]. The latest change wins, on any device.
+const marks = new Map();
 function readWatched() { try { return JSON.parse(localStorage.getItem(WKEY) || '[]'); } catch (e) { return []; } }
-watched = new Set(readWatched());
+function loadMarks() {
+  try { for (const [id, w, t] of JSON.parse(localStorage.getItem(MKEY) || '[]')) marks.set(id, [w, t]); } catch (e) {}
+  for (const id of readWatched()) if (!marks.has(id)) marks.set(id, [1, 1]);   // ticks saved by older versions
+  rebuildWatched();
+}
+function rebuildWatched() { watched = new Set([...marks].filter(([, m]) => m[0]).map(([id]) => id)); }
+function mark(id, on) { marks.set(id, [on ? 1 : 0, Date.now()]); on ? watched.add(id) : watched.delete(id); }
+function mergeMarks(list) {   // list of [id, w, t]; true if anything here was newer than what we had
+  let changed = false;
+  for (const [id, w, t] of list) { const cur = marks.get(id); if (!cur || t > cur[1]) { marks.set(id, [w, t]); changed = true; } }
+  if (changed) rebuildWatched();
+  return changed;
+}
+loadMarks();
 try { Object.assign(prefs, JSON.parse(localStorage.getItem('yt-prefs') || '{}')); } catch (e) {}
 let storageOk = true;
-function saveWatched() {
-  // Keep everything ever ticked (newest last); only trim at an absurd size.
-  const ids = [...watched]; if (ids.length > MAX_WATCHED) ids.splice(0, ids.length - MAX_WATCHED);
+function saveLocal() {
+  const cutoff = Date.now() - KEEP_MS;
+  for (const [id, m] of marks) if (m[1] > 1 && m[1] < cutoff) marks.delete(id);   // forget marks for long-gone videos
   try {
-    localStorage.setItem(WKEY, JSON.stringify(ids));
-    storageOk = JSON.parse(localStorage.getItem(WKEY)).length === ids.length;
+    localStorage.setItem(MKEY, JSON.stringify([...marks].map(([id, m]) => [id, m[0], m[1]])));
+    localStorage.setItem(WKEY, JSON.stringify([...watched]));
+    storageOk = JSON.parse(localStorage.getItem(MKEY)).length === marks.size;
   } catch (e) { storageOk = false; }
   $('warn').hidden = storageOk;
   // Ask the browser not to evict our data (helps on Chrome/Firefox/newer Safari).
   try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
 }
+function saveWatched() { saveLocal(); syncSoon(); }
+
+// ---- Online sync: the marks are also kept in a free anonymous text store under a long random key ----
+// The key lives in the page address (#k=...) and in localStorage, so a bookmark / home-screen icon of the
+// address survives cleared browser data, and opening the same address elsewhere shares the ticks.
+const SYNC_URL = 'https://textdb.dev/api/data/';
+let syncKey = null, syncing = false, syncAgain = false, syncTimer, syncState = 'off';
+function initSyncKey() {
+  const m = location.hash.match(/[#&]k=([\w-]{16,64})/);
+  let k = m && m[1];
+  try { if (!k) k = localStorage.getItem(SKEY); } catch (e) {}
+  if (!k || !/^[\w-]{16,64}$/.test(k)) {
+    const a = new Uint8Array(18); crypto.getRandomValues(a);
+    k = 'yt' + btoa(String.fromCharCode(...a)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+  }
+  try { localStorage.setItem(SKEY, k); } catch (e) {}
+  try { history.replaceState(null, '', location.pathname + location.search + '#k=' + k); } catch (e) {}
+  syncKey = k;
+}
+const serializeMarks = () => [...marks].map(([id, m]) => `${id},${m[0]},${m[1]}`).join('\n');
+function parseMarks(text) {
+  return text.split('\n').map(l => l.trim().split(',')).filter(p => /^[\w-]{11}$/.test(p[0]) && /^[01]$/.test(p[1]) && /^\d+$/.test(p[2]))
+    .map(p => [p[0], +p[1], +p[2]]);
+}
+function setSync(state) {
+  syncState = state;
+  const el = $('syncStatus'); if (!el) return;
+  el.textContent = state === 'ok' ? '☁ Ticks synced online' : state === 'error' ? "☁ Couldn't reach the sync service — ticks are still saved on this device" : '';
+  $('syncLink').value = location.href;
+}
+async function syncNow() {
+  if (!syncKey || location.protocol === 'file:') return;
+  if (syncing) { syncAgain = true; return; }
+  syncing = true;
+  try {
+    const r = await fetch(SYNC_URL + syncKey, { cache: 'no-store' });
+    if (!r.ok) throw new Error('get ' + r.status);
+    const remote = parseMarks(await r.text());
+    if (mergeMarks(remote)) { saveLocal(); render(); }
+    const theirs = new Map(remote.map(([id, w, t]) => [id, t]));
+    const dirty = [...marks].some(([id, m]) => !theirs.has(id) || theirs.get(id) < m[1]);
+    if (dirty) {
+      const p = await fetch(SYNC_URL + syncKey, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: serializeMarks() });
+      if (!p.ok) throw new Error('post ' + p.status);
+    }
+    setSync('ok');
+  } catch (e) { setSync('error'); }
+  syncing = false;
+  if (syncAgain) { syncAgain = false; syncSoon(); }
+}
+function syncSoon() { clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 1200); }
 const savePrefs = () => { try { localStorage.setItem('yt-prefs', JSON.stringify(prefs)); } catch (e) {} };
 // Another tab (or the home-screen app) ticked something: pick it up.
 window.addEventListener('storage', e => {
-  if (e.key === WKEY) { readWatched().forEach(i => watched.add(i)); render(); }
+  if (e.key === MKEY) {
+    try { if (mergeMarks(JSON.parse(e.newValue || '[]'))) render(); } catch (x) {}
+  }
 });
 
 const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
@@ -237,15 +310,15 @@ $('undo').onclick = () => { if (lastAction) lastAction(); $('toast').classList.r
 
 $('list').addEventListener('change', e => {
   const id = e.target.dataset.id; if (!id) return;
-  if (e.target.checked) { watched.add(id); toast('Marked as watched', () => watched.delete(id)); }
-  else watched.delete(id);
+  if (e.target.checked) { mark(id, true); toast('Marked as watched', () => mark(id, false)); }
+  else mark(id, false);
   saveWatched(); render();
 });
 $('list').addEventListener('click', e => {
   const name = e.target.dataset.all; if (!name) return;
   const ids = data.channels.find(c => c.name === name).videos.filter(v => !isWatched(v)).map(v => v.id);
-  ids.forEach(i => watched.add(i)); saveWatched(); render();
-  toast(`Marked ${ids.length} videos as watched`, () => ids.forEach(i => watched.delete(i)));
+  ids.forEach(i => mark(i, true)); saveWatched(); render();
+  toast(`Marked ${ids.length} videos as watched`, () => ids.forEach(i => mark(i, false)));
 });
 $('chips').addEventListener('click', e => {
   const b = e.target.closest('[data-f]'); if (!b) return;
@@ -257,8 +330,13 @@ $('search').addEventListener('input', render);
 $('showWatched').addEventListener('change', render);
 
 const makeCode = () => 'yt1:' + btoa([...watched].join(','));
-$('backupBtn').onclick = () => { $('code').value = makeCode(); $('copied').textContent = ''; $('restored').textContent = ''; $('backup').showModal(); };
+$('backupBtn').onclick = () => { $('syncLink').value = location.href; $('linkCopied').textContent = ''; $('code').value = makeCode(); $('copied').textContent = ''; $('restored').textContent = ''; $('backup').showModal(); };
 $('closeBackup').onclick = () => $('backup').close();
+$('copyLink').onclick = async () => {
+  $('syncLink').select();
+  try { await navigator.clipboard.writeText(location.href); } catch (e) { document.execCommand('copy'); }
+  $('linkCopied').textContent = 'Copied ✓';
+};
 $('copy').onclick = async () => {
   $('code').select();
   try { await navigator.clipboard.writeText($('code').value); $('copied').textContent = 'Copied ✓'; }
@@ -269,11 +347,13 @@ $('restore').onclick = () => {
   try {
     if (!t.startsWith('yt1:')) throw 0;
     const ids = atob(t.slice(4)).split(',').filter(x => /^[\w-]{11}$/.test(x));
-    const before = watched.size; ids.forEach(i => watched.add(i)); saveWatched(); render();
+    const before = watched.size; ids.forEach(i => mark(i, true)); saveWatched(); render();
     $('restored').textContent = `Restored ✓ (${watched.size - before} added)`; $('restoreCode').value = '';
   } catch (e) { $('restored').textContent = "That code didn't look right."; }
 };
-if (location.protocol !== 'file:') saveWatched();   // runs the storage check up front
+saveLocal();                       // runs the storage check up front
+initSyncKey(); syncNow();          // pull ticks made on other devices, push ours
+setInterval(syncNow, 5 * 60 * 1000);
 
 async function load() {
   try {
@@ -294,7 +374,7 @@ load();
 setInterval(load, 5 * 60 * 1000);        // pick up each new 10-minute check promptly
 setInterval(updateStatus, 60 * 1000);    // keep "checked 3 minutes ago" honest
 // Phones/tablets freeze timers in background tabs: reload data the moment the page is seen again.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { load(); syncNow(); } });
 window.addEventListener('pageshow', e => { if (e.persisted) load(); });
 </script>
 </body>
