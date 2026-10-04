@@ -26,3 +26,9 @@ def test_parse_playlist():
     data = {"contents": [lv("aaa", "42:04"), lv("bbb", "1:13:58"), lv("ccc", "LIVE")]}
     html = f"<script>var ytInitialData = {json.dumps(data)};</script>"
     assert parse_playlist(html) == {"aaa": 2524, "bbb": 4438, "ccc": None}
+
+
+def test_parse_shorts():
+    from fetch_videos import parse_shorts
+    html = '{"videoId":"abcdefghijk"} {"contentId":"lmnopqrstuv"} {"videoId":"short"}'
+    assert parse_shorts(html) == {"abcdefghijk", "lmnopqrstuv"}

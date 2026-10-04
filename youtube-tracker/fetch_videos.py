@@ -113,12 +113,21 @@ def parse_playlist(html):
     return found
 
 
-def channel_playlist(channel_id, kind):
-    """kind: UULF = normal videos, UULV = live streams, UUSH = Shorts."""
+def _playlist_html(channel_id, kind):
     r = session.get("https://www.youtube.com/playlist",
                     params={"list": kind + channel_id[2:]}, timeout=30)
     r.raise_for_status()
-    return parse_playlist(r.text)
+    return r.text
+
+
+def channel_playlist(channel_id, kind):
+    """kind: UULF = normal videos, UULV = live streams."""
+    return parse_playlist(_playlist_html(channel_id, kind))
+
+
+def parse_shorts(html):
+    """Shorts use a different layout, so just collect every video id on the page."""
+    return set(re.findall(r'"(?:videoId|contentId)":"([\w-]{11})"', html))
 
 
 def main():
@@ -145,12 +154,13 @@ def main():
             try:
                 for kind in ("UULF", "UULV"):
                     lengths.update(channel_playlist(ch["id"], kind))
-                shorts = set(channel_playlist(ch["id"], "UUSH"))
+                shorts = parse_shorts(_playlist_html(ch["id"], "UUSH"))
             except Exception as exc:  # no lengths/Shorts info; still list the videos
                 print(f"{name}: could not read length lists ({exc})", file=sys.stderr)
             videos = []
             for v in parse_feed(r.text):
-                if v["id"] in shorts:
+                # Not in the normal-video/live lists (when we have them) means a Short.
+                if v["id"] in shorts or (lengths and v["id"] not in lengths):
                     continue
                 seconds = lengths.get(v["id"]) or previous.get(v["id"], {}).get("seconds")
                 v.update(seconds=seconds, url=f"https://www.youtube.com/watch?v={v['id']}")
