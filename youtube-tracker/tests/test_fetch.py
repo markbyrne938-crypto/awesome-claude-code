@@ -42,3 +42,11 @@ def test_keep_video():
     assert not keep_video("b", lengths, set(), {"b"})      # live stream, even if also listed as a video
     assert not keep_video("z", lengths, set(), set())      # not a normal upload (e.g. premiere)
     assert keep_video("z", {}, set(), set())               # no lists available: don't hide anything
+
+
+def test_is_recent():
+    from datetime import datetime, timezone
+    from fetch_videos import is_recent
+    now = datetime(2026, 10, 4, tzinfo=timezone.utc)
+    assert is_recent("2026-09-10T12:00:00+00:00", 31, now)
+    assert not is_recent("2026-08-30T12:00:00+00:00", 31, now)

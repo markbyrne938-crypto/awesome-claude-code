@@ -276,7 +276,13 @@ $('restore').onclick = () => {
 if (location.protocol !== 'file:') saveWatched();   // runs the storage check up front
 
 async function load() {
-  try { data = await (await fetch('videos.json', { cache: 'no-store' })).json(); render(); }
+  try {
+    data = await (await fetch('videos.json', { cache: 'no-store' })).json();
+    // Nothing older than a month is shown (the fetcher also drops them; this covers stale data).
+    const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 1);
+    data.channels.forEach(c => { c.videos = c.videos.filter(v => new Date(v.published) >= cutoff); });
+    render();
+  }
   catch (e) { $('status').textContent = 'Could not load video data'; }
 }
 $('refresh').addEventListener('click', async () => {
