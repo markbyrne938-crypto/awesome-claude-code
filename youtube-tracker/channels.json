@@ -1,5 +1,6 @@
 {
   "videos_per_channel": 5,
+  "max_age_days": 31,
   "channels": [
     {
       "name": "Ryan Trahan",

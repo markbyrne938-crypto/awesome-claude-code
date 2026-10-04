@@ -9,7 +9,7 @@ import json
 import re
 import sys
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -130,6 +130,12 @@ def parse_shorts(html):
     return set(re.findall(r'"(?:videoId|contentId)":"([\w-]{11})"', html))
 
 
+def is_recent(published, max_age_days, now=None):
+    """True if the ISO timestamp is no older than max_age_days."""
+    now = now or datetime.now(timezone.utc)
+    return datetime.fromisoformat(published) >= now - timedelta(days=max_age_days)
+
+
 def keep_video(video_id, lengths, shorts, lives):
     """Normal uploads only: drop Shorts and live streams (past or present).
 
@@ -144,6 +150,7 @@ def keep_video(video_id, lengths, shorts, lives):
 def main():
     config = json.loads(CONFIG.read_text())
     limit = config.get("videos_per_channel", 5)
+    max_age = config.get("max_age_days", 31)   # ~1 month: older videos are not shown
     previous = {}
     if OUTPUT.exists():
         for ch in json.loads(OUTPUT.read_text()).get("channels", []):
@@ -173,7 +180,7 @@ def main():
                     print(f"{name}: could not read {label} list ({exc})", file=sys.stderr)
             videos = []
             for v in parse_feed(r.text):
-                if not keep_video(v["id"], lengths, shorts, lives):
+                if not keep_video(v["id"], lengths, shorts, lives) or not is_recent(v["published"], max_age):
                     continue
                 seconds = lengths.get(v["id"]) or previous.get(v["id"], {}).get("seconds")
                 v.update(seconds=seconds, url=f"https://www.youtube.com/watch?v={v['id']}")
