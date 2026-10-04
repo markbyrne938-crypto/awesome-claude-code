@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Fetch the newest videos for each channel in channels.json -> videos.json.
 
-Uses only YouTube's public RSS feeds and pages (no API key). Channel IDs are
+Uses only YouTube's public RSS feeds and playlist pages (no API key). Channel IDs are
 looked up once by name and cached back into channels.json as "id"; to fix a
 wrong match, put the right "id" (UC...) in channels.json yourself.
 """
@@ -68,15 +68,57 @@ def parse_feed(xml_text):
     return videos
 
 
-def video_details(video_id):
-    """Return (length_seconds, is_short, is_live_or_upcoming) from the watch page."""
-    r = session.get("https://www.youtube.com/watch", params={"v": video_id}, timeout=20)
-    m = re.search(r'"lengthSeconds":"(\d+)"', r.text)
-    seconds = int(m.group(1)) if m else None
-    upcoming = '"isUpcoming":true' in r.text
-    # Shorts URL serves the page (200) for shorts and redirects for normal videos.
-    s = session.head(f"https://www.youtube.com/shorts/{video_id}", allow_redirects=False, timeout=20)
-    return seconds, s.status_code == 200, upcoming
+def parse_duration(text):
+    """'1:13:58' -> 4438; anything else (e.g. 'LIVE') -> None."""
+    if not re.fullmatch(r"\d{1,2}(:\d{2}){1,2}", text or ""):
+        return None
+    secs = 0
+    for part in text.split(":"):
+        secs = secs * 60 + int(part)
+    return secs
+
+
+def _badge_text(o):
+    if isinstance(o, dict):
+        badge = o.get("thumbnailBadgeViewModel")
+        if isinstance(badge, dict) and isinstance(badge.get("text"), str):
+            return badge["text"]
+        o = list(o.values())
+    for v in o if isinstance(o, list) else []:
+        found = _badge_text(v)
+        if found:
+            return found
+    return None
+
+
+def parse_playlist(html):
+    """Map video id -> length in seconds (None if unknown) from a playlist page."""
+    m = re.search(r"var ytInitialData = (\{.*?\});</script>", html, re.S)
+    if not m:
+        raise RuntimeError("playlist page format not recognised")
+    found = {}
+
+    def walk(o):
+        if isinstance(o, dict):
+            lv = o.get("lockupViewModel")
+            if isinstance(lv, dict) and lv.get("contentId"):
+                found[lv["contentId"]] = parse_duration(_badge_text(lv))
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    walk(json.loads(m.group(1)))
+    return found
+
+
+def channel_playlist(channel_id, kind):
+    """kind: UULF = normal videos, UULV = live streams, UUSH = Shorts."""
+    r = session.get("https://www.youtube.com/playlist",
+                    params={"list": kind + channel_id[2:]}, timeout=30)
+    r.raise_for_status()
+    return parse_playlist(r.text)
 
 
 def main():
@@ -99,16 +141,19 @@ def main():
             r = session.get("https://www.youtube.com/feeds/videos.xml",
                             params={"channel_id": ch["id"]}, timeout=20)
             r.raise_for_status()
+            lengths, shorts = {}, set()
+            try:
+                for kind in ("UULF", "UULV"):
+                    lengths.update(channel_playlist(ch["id"], kind))
+                shorts = set(channel_playlist(ch["id"], "UUSH"))
+            except Exception as exc:  # no lengths/Shorts info; still list the videos
+                print(f"{name}: could not read length lists ({exc})", file=sys.stderr)
             videos = []
             for v in parse_feed(r.text):
-                if v["id"] in previous and previous[v["id"]].get("seconds") is not None:
-                    v = {**previous[v["id"]], "title": v["title"]}
-                else:
-                    sec, short, upcoming = video_details(v["id"])
-                    v.update(seconds=sec, short=short, upcoming=upcoming)
-                if v["short"] or v["upcoming"]:
+                if v["id"] in shorts:
                     continue
-                v["url"] = f"https://www.youtube.com/watch?v={v['id']}"
+                seconds = lengths.get(v["id"]) or previous.get(v["id"], {}).get("seconds")
+                v.update(seconds=seconds, url=f"https://www.youtube.com/watch?v={v['id']}")
                 videos.append(v)
                 if len(videos) >= limit:
                     break

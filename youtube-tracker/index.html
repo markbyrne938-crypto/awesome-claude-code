@@ -96,7 +96,7 @@ const isWatched = v => watched.has(v.id);
 function card(v, showChannel) {
   const w = isWatched(v);
   return `<article class="card ${w ? 'watched' : ''}">
-    <a class="thumb" href="${v.url}" target="_blank" rel="noopener"><img loading="lazy" alt="" src="https://i.ytimg.com/vi/${v.id}/mqdefault.jpg"><span class="dur">${dur(v.seconds)}</span></a>
+    <a class="thumb" href="${v.url}" target="_blank" rel="noopener"><img loading="lazy" alt="" src="https://i.ytimg.com/vi/${v.id}/mqdefault.jpg">${v.seconds != null ? `<span class="dur">${dur(v.seconds)}</span>` : ''}</a>
     <div class="body">
       <a class="title" href="${v.url}" target="_blank" rel="noopener">${esc(v.title)}</a>
       <div class="meta">${showChannel ? `<b>${esc(v.channel)}</b> · ` : ''}${ago(v.published)} · ${new Date(v.published).toLocaleDateString(undefined, {day:'numeric', month:'short', year:'numeric'})}</div>
