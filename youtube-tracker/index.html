@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>YouTube Watchlist</title>
+<style>
+  :root { --bg:#f6f6f4; --card:#fff; --text:#1c1c1c; --muted:#6b6b6b; --line:#e4e4e0; --accent:#d62828; --ok:#2a9d4a; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#141414; --card:#1e1e1e; --text:#eee; --muted:#9a9a9a; --line:#2e2e2e; --accent:#ff5252; --ok:#4cc46e; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.4 system-ui,sans-serif; }
+  main { max-width:860px; margin:0 auto; padding:16px; }
+  header { display:flex; flex-wrap:wrap; gap:10px 16px; align-items:center; justify-content:space-between; margin:8px 0 16px; }
+  h1 { font-size:1.4rem; margin:0; }
+  .tools { display:flex; gap:14px; align-items:center; flex-wrap:wrap; color:var(--muted); font-size:.9rem; }
+  button { font:inherit; background:var(--accent); color:#fff; border:0; border-radius:8px; padding:8px 14px; cursor:pointer; }
+  button:disabled { opacity:.6; cursor:wait; }
+  .row { display:grid; grid-template-columns:auto 160px 1fr; gap:14px; align-items:center; background:var(--card);
+         border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:10px; transition:opacity .3s, transform .3s; }
+  .row.gone { opacity:0; transform:translateX(30px); }
+  .row.done { opacity:.55; }
+  .row input { width:26px; height:26px; accent-color:var(--ok); cursor:pointer; }
+  .row img { width:160px; aspect-ratio:16/9; object-fit:cover; border-radius:8px; background:var(--line); display:block; }
+  .chan { font-size:.8rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  .chan a, .title a { color:inherit; text-decoration:none; }
+  .title { font-weight:600; margin:2px 0 4px; }
+  .title a:hover { color:var(--accent); }
+  .meta { color:var(--muted); font-size:.9rem; }
+  .err { grid-template-columns:1fr; color:var(--muted); }
+  .caught { color:var(--muted); font-size:.9rem; margin-top:18px; }
+  #toast { position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#222; color:#fff; padding:10px 16px;
+           border-radius:10px; display:none; gap:12px; align-items:center; }
+  #toast a { color:#ffb4b4; cursor:pointer; text-decoration:underline; }
+  @media (max-width:560px) { .row { grid-template-columns:auto 1fr; } .row img { grid-column:1/-1; grid-row:1; width:100%; } .row input { grid-row:2; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>📺 YouTube Watchlist</h1>
+    <div class="tools">
+      <span id="status">Loading…</span>
+      <label><input type="checkbox" id="showWatched"> Show watched</label>
+      <button id="refresh">Check now</button>
+    </div>
+  </header>
+  <div id="list"></div>
+  <div class="caught" id="caught"></div>
+</main>
+<div id="toast"><span id="toastText"></span><a id="undo">Undo</a></div>
+<script>
+const $ = id => document.getElementById(id);
+let data = {items: [], checked: null, refreshing: false};
+let toastTimer;
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function duration(s) {
+  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+}
+function ago(iso) {
+  const mins = (Date.now() - new Date(iso)) / 60000;
+  if (mins < 60) return `${Math.max(1, Math.round(mins))} min ago`;
+  if (mins < 1440) return `${Math.round(mins / 60)} hr ago`;
+  const d = Math.round(mins / 1440);
+  return d < 60 ? `${d} day${d > 1 ? 's' : ''} ago` : `${Math.round(d / 30)} months ago`;
+}
+
+function render() {
+  const show = $('showWatched').checked;
+  const todo = data.items.filter(i => i.error || show || !i.watched);
+  $('list').innerHTML = todo.map(i => i.error
+    ? `<div class="row err">⚠️ <b>${esc(i.channel)}</b>: ${esc(i.error)}</div>`
+    : `<div class="row ${i.watched ? 'done' : ''}" data-id="${i.id}">
+        <input type="checkbox" ${i.watched ? 'checked' : ''} title="Mark as watched">
+        <a href="${i.url}" target="_blank" rel="noopener"><img loading="lazy" src="https://i.ytimg.com/vi/${i.id}/mqdefault.jpg" alt=""></a>
+        <div>
+          <div class="chan"><a href="${i.channelUrl}" target="_blank" rel="noopener">${esc(i.channelName)}</a></div>
+          <div class="title"><a href="${i.url}" target="_blank" rel="noopener">${esc(i.title)}</a></div>
+          <div class="meta">⏱ ${duration(i.seconds)} · 📅 ${new Date(i.published).toLocaleDateString(undefined,{day:'numeric',month:'short',year:'numeric'})} (${ago(i.published)})</div>
+        </div>
+      </div>`).join('');
+  const caught = data.items.filter(i => !i.error && i.watched).map(i => i.channelName);
+  $('caught').textContent = !show && caught.length ? `✓ All caught up: ${caught.join(', ')}` : '';
+  if (!data.checked) $('status').textContent = data.refreshing ? 'Checking channels… (first run takes ~30s)' : 'Waiting for first check…';
+  else $('status').textContent = `${data.items.filter(i => !i.error && !i.watched).length} to watch · checked ${ago(data.checked)}` + (data.refreshing ? ' · refreshing…' : '');
+  $('refresh').disabled = data.refreshing;
+}
+
+async function load() {
+  try { data = await (await fetch('/api/videos')).json(); render(); } catch { $('status').textContent = 'Server not reachable'; }
+}
+async function setWatched(id, watched) {
+  await fetch('/api/watched', {method:'POST', body: JSON.stringify({id, watched})});
+  const item = data.items.find(i => i.id === id); if (item) item.watched = watched;
+}
+
+$('list').addEventListener('change', e => {
+  const row = e.target.closest('.row'), id = row.dataset.id, watched = e.target.checked;
+  setWatched(id, watched);
+  const finish = () => render();
+  if (watched && !$('showWatched').checked) {
+    row.classList.add('gone');
+    setTimeout(finish, 300);
+    $('toastText').textContent = 'Marked as watched';
+    $('toast').style.display = 'flex';
+    $('undo').onclick = async () => { await setWatched(id, false); $('toast').style.display = 'none'; render(); };
+    clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').style.display = 'none', 6000);
+  } else finish();
+});
+$('showWatched').onchange = render;
+$('refresh').onclick = async () => { await fetch('/api/refresh', {method:'POST'}); data.refreshing = true; render(); };
+
+load(); setInterval(load, 20000);
+</script>
+</body>
+</html>
