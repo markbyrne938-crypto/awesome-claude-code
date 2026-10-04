@@ -121,13 +121,24 @@ def _playlist_html(channel_id, kind):
 
 
 def channel_playlist(channel_id, kind):
-    """kind: UULF = normal videos, UULV = live streams."""
+    """kind: UULF = normal videos, UULV = live streams (UUSH = Shorts, see parse_shorts)."""
     return parse_playlist(_playlist_html(channel_id, kind))
 
 
 def parse_shorts(html):
     """Shorts use a different layout, so just collect every video id on the page."""
     return set(re.findall(r'"(?:videoId|contentId)":"([\w-]{11})"', html))
+
+
+def keep_video(video_id, lengths, shorts, lives):
+    """Normal uploads only: drop Shorts and live streams (past or present).
+
+    `lengths` is the channel's normal-video list; when we have it, anything not
+    in it (a Short, a stream, a premiere) is dropped as well.
+    """
+    if video_id in shorts or video_id in lives:
+        return False
+    return not lengths or video_id in lengths
 
 
 def main():
@@ -150,17 +161,19 @@ def main():
             r = session.get("https://www.youtube.com/feeds/videos.xml",
                             params={"channel_id": ch["id"]}, timeout=20)
             r.raise_for_status()
-            lengths, shorts = {}, set()
-            try:
-                for kind in ("UULF", "UULV"):
-                    lengths.update(channel_playlist(ch["id"], kind))
-                shorts = parse_shorts(_playlist_html(ch["id"], "UUSH"))
-            except Exception as exc:  # no lengths/Shorts info; still list the videos
-                print(f"{name}: could not read length lists ({exc})", file=sys.stderr)
+            lengths, shorts, lives = {}, set(), set()
+            for label, load in (
+                ("lengths", lambda: lengths.update(channel_playlist(ch["id"], "UULF"))),
+                ("Shorts", lambda: shorts.update(parse_shorts(_playlist_html(ch["id"], "UUSH")))),
+                ("live streams", lambda: lives.update(channel_playlist(ch["id"], "UULV"))),
+            ):
+                try:
+                    load()
+                except Exception as exc:  # no info for this list; still show the videos
+                    print(f"{name}: could not read {label} list ({exc})", file=sys.stderr)
             videos = []
             for v in parse_feed(r.text):
-                # Not in the normal-video/live lists (when we have them) means a Short.
-                if v["id"] in shorts or (lengths and v["id"] not in lengths):
+                if not keep_video(v["id"], lengths, shorts, lives):
                     continue
                 seconds = lengths.get(v["id"]) or previous.get(v["id"], {}).get("seconds")
                 v.update(seconds=seconds, url=f"https://www.youtube.com/watch?v={v['id']}")

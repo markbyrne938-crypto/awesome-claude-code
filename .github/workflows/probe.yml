@@ -1,0 +1,21 @@
+name: probe
+on:
+  push:
+    paths: [".github/workflows/probe.yml"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install requests
+      - run: |
+          cp youtube-tracker/videos.json /tmp/before.json
+          python youtube-tracker/fetch_videos.py 2>&1 | grep -v "^$"
+          python - <<'PY'
+          import json
+          b = {v["id"]: v["title"] for c in json.load(open("/tmp/before.json"))["channels"] for v in c["videos"]}
+          a = {v["id"] for c in json.load(open("youtube-tracker/videos.json"))["channels"] for v in c["videos"]}
+          print("DROPPED since last run:", [t for i, t in b.items() if i not in a])
+          cfg = json.load(open("youtube-tracker/channels.json"))
+          print("IDS:", [(c["name"], c.get("id")) for c in cfg["channels"][-4:]])
+          PY
