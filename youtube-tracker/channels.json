@@ -1,19 +1,62 @@
 {
   "videos_per_channel": 5,
   "channels": [
-    {"name": "Ryan Trahan"},
-    {"name": "Trek Trendy"},
-    {"name": "Simon Wilson"},
-    {"name": "Planes, Trains, Everything"},
-    {"name": "Steve Marsh"},
-    {"name": "Walk with me Tim"},
-    {"name": "Chris Howett"},
-    {"name": "Hangtime"},
-    {"name": "Adz Uncut"},
-    {"name": "Worldwide Dom"},
-    {"name": "Paul_IsItWorthIt", "search": "Paul IsItWorthIt"},
-    {"name": "Mat Armstrong"},
-    {"name": "Harrison Webb"},
-    {"name": "A Comedy Thing"}
+    {
+      "name": "Ryan Trahan",
+      "id": "UCnmGIkw-KdI0W5siakKPKog"
+    },
+    {
+      "name": "Trek Trendy",
+      "id": "UC50xPFPma-nCS5GZpAFukpQ"
+    },
+    {
+      "name": "Simon Wilson",
+      "id": "UCQCrKxBj5Id79syQEsY2Qxg"
+    },
+    {
+      "name": "Planes, Trains, Everything",
+      "id": "UCcKw8Eg0FfRvhIAnC0cPGAA"
+    },
+    {
+      "name": "Steve Marsh",
+      "id": "UCBhQuxcHU3aydk_zTXcbdTg"
+    },
+    {
+      "name": "Walk with me Tim",
+      "id": "UCds9ox_aTIGDCpB6rODmS7w"
+    },
+    {
+      "name": "Chris Howett",
+      "id": "UCV_X7eK-qeYAZZd6E5Dt-fw"
+    },
+    {
+      "name": "Hangtime",
+      "id": "UC3wc2MERkKAqNEtaiQslC-A"
+    },
+    {
+      "name": "Adz Uncut",
+      "id": "UCyLxkYlzuwSjA9ZtP_W91NQ"
+    },
+    {
+      "name": "Worldwide Dom",
+      "id": "UC2Td19juU55BkzaQQ4hhToA"
+    },
+    {
+      "name": "Paul_IsItWorthIt",
+      "search": "Paul IsItWorthIt",
+      "id": "UCuH-q2WRB-8GcmCy7hQ9N3A"
+    },
+    {
+      "name": "Mat Armstrong",
+      "id": "UCcLYOTz3ct6_lk9iLToxxAw"
+    },
+    {
+      "name": "Harrison Webb",
+      "id": "UCDFwzav9y6jSFwZDr5EPHuA"
+    },
+    {
+      "name": "A Comedy Thing",
+      "id": "UCBjAf1VdQ-8GPkw99K8Ckfw"
+    }
   ]
 }
