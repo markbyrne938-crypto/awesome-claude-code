@@ -1,0 +1,19 @@
+{
+  "videos_per_channel": 5,
+  "channels": [
+    {"name": "Ryan Trahan"},
+    {"name": "Trek Trendy"},
+    {"name": "Simon Wilson"},
+    {"name": "Planes, Trains, Everything"},
+    {"name": "Steve Marsh"},
+    {"name": "Walk with me Tim"},
+    {"name": "Chris Howett"},
+    {"name": "Hangtime"},
+    {"name": "Adz Uncut"},
+    {"name": "Worldwide Dom"},
+    {"name": "Paul_IsItWorthIt", "search": "Paul IsItWorthIt"},
+    {"name": "Mat Armstrong"},
+    {"name": "Harrison Webb"},
+    {"name": "A Comedy Thing"}
+  ]
+}
