@@ -213,7 +213,13 @@ function render() {
     if (!html) html = nothing();
   }
   $('list').innerHTML = html;
-  $('status').textContent = `${total} to watch` + (data.updated ? ` · checked ${ago(data.updated)}` : '');
+  lastTotal = total; updateStatus();
+}
+let lastTotal = 0;
+function updateStatus() {
+  const el = $('status'), stale = data.updated && Date.now() - new Date(data.updated) > 30 * 60000;
+  el.textContent = `${lastTotal} to watch` + (data.updated ? ` · checked ${ago(data.updated)}` : '') + (stale ? ' ⚠️ updates look delayed' : '');
+  el.style.color = stale ? 'var(--accent)' : '';
 }
 function nothing() {
   const filtering = $('search').value.trim() || prefs.length !== 'any';
@@ -278,7 +284,12 @@ $('refresh').addEventListener('click', async () => {
   try { await fetch('refresh', { method: 'POST' }); } catch (e) {}   // only does something when run via serve.py
   await load(); b.disabled = false; b.textContent = '↻ Refresh';
 });
-load(); setInterval(load, 10 * 60 * 1000);
+load();
+setInterval(load, 5 * 60 * 1000);        // pick up each new 10-minute check promptly
+setInterval(updateStatus, 60 * 1000);    // keep "checked 3 minutes ago" honest
+// Phones/tablets freeze timers in background tabs: reload data the moment the page is seen again.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) load(); });
+window.addEventListener('pageshow', e => { if (e.persisted) load(); });
 </script>
 </body>
 </html>
