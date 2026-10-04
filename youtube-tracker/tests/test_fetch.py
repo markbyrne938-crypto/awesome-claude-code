@@ -32,3 +32,13 @@ def test_parse_shorts():
     from fetch_videos import parse_shorts
     html = '{"videoId":"abcdefghijk"} {"contentId":"lmnopqrstuv"} {"videoId":"short"}'
     assert parse_shorts(html) == {"abcdefghijk", "lmnopqrstuv"}
+
+
+def test_keep_video():
+    from fetch_videos import keep_video
+    lengths = {"a": 100, "b": 200, "c": 300}
+    assert keep_video("a", lengths, set(), set())
+    assert not keep_video("s", lengths, {"s"}, set())      # Short
+    assert not keep_video("b", lengths, set(), {"b"})      # live stream, even if also listed as a video
+    assert not keep_video("z", lengths, set(), set())      # not a normal upload (e.g. premiere)
+    assert keep_video("z", {}, set(), set())               # no lists available: don't hide anything
