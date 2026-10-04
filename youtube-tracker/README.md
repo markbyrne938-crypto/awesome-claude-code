@@ -19,4 +19,4 @@ Edit `channels.json`. On first run each channel name is searched on YouTube and 
 3. Go to the **Actions** tab, open **YouTube tracker website** and click **Run workflow**.
 4. After a minute your site is live at `https://<your-username>.github.io/<repo-name>/` (shown in the workflow run). Bookmark it on your phone.
 
-The site re-checks YouTube every hour. Ticks are stored in each browser/device separately.
+The site re-checks YouTube about every 10 minutes (GitHub can delay scheduled runs a little). Ticks are stored in each browser/device separately; use **Backup** on the page to copy your watched list to another device or keep a safety copy.
