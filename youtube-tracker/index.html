@@ -6,66 +6,86 @@
 <title>My YouTube Watchlist</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📺</text></svg>">
 <style>
-  :root { --bg:#f4f5f7; --card:#fff; --text:#16181d; --muted:#656b76; --line:#e2e4e9; --accent:#e02b20; --accent-soft:#fde9e7; --ok:#1a8f4c; }
+  :root { --bg:#f4f5f7; --card:#fff; --text:#16181d; --muted:#656b76; --line:#e2e4e9; --accent:#e02b20; --accent-soft:#fde9e7; --ok:#1a8f4c; --ok-soft:#e5f6ec; }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#0f1012; --card:#1a1b1e; --text:#eceef2; --muted:#9aa0ab; --line:#2b2d31; --accent:#ff5f54; --accent-soft:#3a1c1a; --ok:#4ccf86; }
+    :root { --bg:#0f1012; --card:#1a1b1e; --text:#eceef2; --muted:#9aa0ab; --line:#2b2d31; --accent:#ff5f54; --accent-soft:#3a1c1a; --ok:#4ccf86; --ok-soft:#14301f; }
   }
   * { box-sizing:border-box; }
   body { margin:0; background:var(--bg); color:var(--text); font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
   header { background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
-  .bar { max-width:1100px; margin:0 auto; padding:12px 16px; display:flex; flex-wrap:wrap; gap:10px 14px; align-items:center; }
-  h1 { font-size:20px; margin:0; margin-right:auto; }
+  .bar { max-width:1100px; margin:0 auto; padding:10px 16px 6px; display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
+  h1 { font-size:20px; margin:0; }
   .sub { color:var(--muted); font-size:13px; }
-  button, .seg label { font:inherit; font-size:14px; padding:7px 14px; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--text); cursor:pointer; }
-  button:hover { border-color:var(--accent); }
+  .grow { margin-right:auto; }
+  button, select, input[type=search] { font:inherit; font-size:14px; padding:8px 14px; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--text); }
+  button { cursor:pointer; } button:hover { border-color:var(--accent); }
   button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   button:disabled { opacity:.6; cursor:wait; }
+  input[type=search] { flex:1 1 180px; min-width:0; border-radius:10px; }
   .seg { display:inline-flex; } .seg input { display:none; }
-  .seg label { border-radius:0; margin-left:-1px; } .seg label:first-child { border-radius:999px 0 0 999px; margin:0; } .seg label:last-child { border-radius:0 999px 999px 0; }
+  .seg label { font-size:14px; padding:8px 14px; border:1px solid var(--line); margin-left:-1px; cursor:pointer; background:var(--card); }
+  .seg label:first-of-type { border-radius:999px 0 0 999px; margin:0; } .seg label:last-of-type { border-radius:0 999px 999px 0; }
   .seg input:checked + label { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:600; position:relative; }
   .toggle { display:flex; gap:6px; align-items:center; font-size:14px; color:var(--muted); cursor:pointer; }
-  .toggle input { accent-color:var(--accent); width:16px; height:16px; }
-  .chips { max-width:1100px; margin:0 auto; padding:0 16px 12px; display:flex; gap:8px; overflow-x:auto; scrollbar-width:thin; }
-  .chip { flex:none; white-space:nowrap; }
+  .toggle input { accent-color:var(--accent); width:18px; height:18px; }
+  .chips { max-width:1100px; margin:0 auto; padding:2px 16px 12px; display:flex; gap:8px; overflow-x:auto; scrollbar-width:thin; }
+  .chip { flex:none; white-space:nowrap; padding:6px 12px; }
   .chip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
   .chip small { opacity:.75; margin-left:4px; }
   main { max-width:1100px; margin:0 auto; padding:16px; }
   .group { margin-bottom:26px; }
-  .group h2 { font-size:17px; margin:0 0 10px; display:flex; align-items:center; gap:10px; }
-  .group h2 .link { margin-left:auto; font-size:13px; font-weight:400; color:var(--muted); background:none; border:none; padding:0; text-decoration:underline; cursor:pointer; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; }
+  .group h2 { font-size:17px; margin:0 0 10px; display:flex; align-items:baseline; gap:10px; }
+  .group h2 .link { margin-left:auto; font-size:13px; font-weight:400; color:var(--muted); background:none; border:none; padding:0; text-decoration:underline; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; transition:opacity .2s; }
-  .card.watched { opacity:.45; }
+  .card.watched { opacity:.5; }
   .thumb { position:relative; display:block; aspect-ratio:16/9; background:var(--line); }
   .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
   .dur { position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.82); color:#fff; font-size:12px; font-weight:600; padding:2px 6px; border-radius:6px; }
+  .new { position:absolute; left:8px; top:8px; background:var(--accent); color:#fff; font-size:11px; font-weight:700; letter-spacing:.04em; padding:2px 7px; border-radius:6px; }
   .body { padding:12px 14px 14px; display:flex; flex-direction:column; gap:6px; flex:1; }
+  .chan { font-size:13px; font-weight:600; color:var(--accent); }
   .title { color:inherit; text-decoration:none; font-weight:600; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
   .title:hover { color:var(--accent); }
   .meta { color:var(--muted); font-size:13px; }
-  .tick { margin-top:auto; display:flex; align-items:center; gap:10px; padding:10px 12px; border:1.5px solid var(--line); border-radius:10px; cursor:pointer; font-size:15px; font-weight:500; user-select:none; }
+  .tick { margin-top:auto; display:flex; align-items:center; gap:10px; padding:11px 12px; border:1.5px solid var(--line); border-radius:10px; cursor:pointer; font-size:15px; font-weight:500; user-select:none; -webkit-tap-highlight-color:transparent; }
   .tick:hover { border-color:var(--ok); }
-  .tick input { width:22px; height:22px; accent-color:var(--ok); cursor:pointer; margin:0; }
-  .card.watched .tick { border-color:var(--ok); color:var(--ok); }
+  .tick input { width:24px; height:24px; accent-color:var(--ok); cursor:pointer; margin:0; }
+  .card.watched .tick { border-color:var(--ok); background:var(--ok-soft); color:var(--ok); }
   .empty { background:var(--card); border:1px dashed var(--line); border-radius:14px; padding:28px 16px; text-align:center; color:var(--muted); }
   .empty.big { padding:48px 16px; } .empty b { color:var(--text); font-size:18px; display:block; margin-bottom:6px; }
+  .empty button { margin-top:12px; }
   .err { color:var(--accent); }
-  .toast { position:fixed; left:50%; bottom:20px; transform:translate(-50%,80px); background:#222; color:#fff; padding:10px 14px; border-radius:12px; display:flex; gap:14px; align-items:center; opacity:0; transition:.25s; z-index:9; max-width:92vw; }
-  .toast.show { transform:translate(-50%,0); opacity:1; }
+  .toast { position:fixed; left:50%; bottom:20px; transform:translate(-50%,80px); background:#222; color:#fff; padding:10px 14px; border-radius:12px; display:flex; gap:14px; align-items:center; opacity:0; transition:.25s; z-index:9; max-width:92vw; pointer-events:none; }
+  .toast.show { transform:translate(-50%,0); opacity:1; pointer-events:auto; }
   .toast button { background:none; border:none; color:#ffb4ae; padding:0; font-weight:600; }
   footer { text-align:center; color:var(--muted); font-size:12px; padding:10px 16px 30px; }
+  @media (max-width:560px) {
+    header { position:static; }
+    .grid { grid-template-columns:1fr; }
+    .card { flex-direction:row; } .thumb { width:132px; aspect-ratio:16/9; flex:none; align-self:flex-start; }
+    .card .body { padding:10px 12px; } .tick { padding:9px 10px; font-size:14px; }
+    .card { flex-wrap:wrap; } .card .body { flex:1 1 0; min-width:0; }
+  }
 </style>
 </head>
 <body>
 <header>
   <div class="bar">
-    <div style="margin-right:auto"><h1>📺 My YouTube Watchlist</h1><div class="sub" id="status">Loading…</div></div>
-    <div class="seg" role="radiogroup" aria-label="Layout">
-      <input type="radio" name="view" id="v-channel" value="channel" checked><label for="v-channel">By channel</label>
-      <input type="radio" name="view" id="v-new" value="new"><label for="v-new">Newest first</label>
-    </div>
-    <label class="toggle"><input type="checkbox" id="showWatched"> Show watched</label>
+    <div class="grow"><h1>📺 My YouTube Watchlist</h1><div class="sub" id="status">Loading…</div></div>
     <button id="refresh" class="primary">↻ Refresh</button>
+  </div>
+  <div class="bar">
+    <input type="search" id="search" placeholder="Search videos or channels…" aria-label="Search">
+    <div class="seg" role="radiogroup" aria-label="Layout">
+      <input type="radio" name="view" id="v-new" value="new" checked><label for="v-new">Newest first</label>
+      <input type="radio" name="view" id="v-channel" value="channel"><label for="v-channel">By channel</label>
+    </div>
+    <select id="length" aria-label="Video length">
+      <option value="any">Any length</option><option value="short">Under 15 min</option>
+      <option value="medium">15–45 min</option><option value="long">Over 45 min</option>
+    </select>
+    <label class="toggle"><input type="checkbox" id="showWatched"> Show watched</label>
   </div>
   <div class="chips" id="chips"></div>
 </header>
@@ -73,15 +93,16 @@
 <footer>Ticks are saved in this browser only. New uploads are checked automatically every hour.</footer>
 <div class="toast" id="toast"><span id="toastMsg"></span><button id="undo">Undo</button></div>
 <script>
-const KEY = 'yt-watched', $ = id => document.getElementById(id);
-let watched = new Set(), data = { channels: [] }, filter = 'all', lastAction = null, toastTimer;
-try { watched = new Set(JSON.parse(localStorage.getItem(KEY) || '[]')); } catch (e) {}
-try { filter = localStorage.getItem('yt-filter') || 'all'; } catch (e) {}
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify([...watched])); } catch (e) {} };
+const $ = id => document.getElementById(id);
+let watched = new Set(), data = { channels: [] }, prefs = { view: 'new', filter: 'all', length: 'any' }, lastAction = null, toastTimer;
+try { watched = new Set(JSON.parse(localStorage.getItem('yt-watched') || '[]')); } catch (e) {}
+try { Object.assign(prefs, JSON.parse(localStorage.getItem('yt-prefs') || '{}')); } catch (e) {}
+const saveWatched = () => { try { localStorage.setItem('yt-watched', JSON.stringify([...watched])); } catch (e) {} };
+const savePrefs = () => { try { localStorage.setItem('yt-prefs', JSON.stringify(prefs)); } catch (e) {} };
 
 const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
+const attr = s => esc(s).replace(/"/g, '&quot;');
 function dur(s) {
-  if (s == null) return '';
   const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, '0');
   return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`;
 }
@@ -91,79 +112,108 @@ function ago(iso) {
     if (mins >= n) { const v = Math.floor(mins / n); return `${v} ${u}${v > 1 ? 's' : ''} ago`; }
   return 'just now';
 }
+function dayGroup(iso) {
+  const d = new Date(iso), now = new Date();
+  const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+  return days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 7 ? 'Earlier this week' : days < 31 ? 'Earlier this month' : 'Older';
+}
 const isWatched = v => watched.has(v.id);
+const byNewest = (a, b) => new Date(b.published) - new Date(a.published);
+function lengthOk(v) {
+  if (prefs.length === 'any' || v.seconds == null) return true;
+  const m = v.seconds / 60;
+  return prefs.length === 'short' ? m < 15 : prefs.length === 'medium' ? m >= 15 && m <= 45 : m > 45;
+}
+function searchOk(v, chan) {
+  const q = $('search').value.trim().toLowerCase();
+  return !q || v.title.toLowerCase().includes(q) || chan.toLowerCase().includes(q);
+}
 
 function card(v, showChannel) {
-  const w = isWatched(v);
+  const w = isWatched(v), fresh = !w && Date.now() - new Date(v.published) < 48 * 36e5;
   return `<article class="card ${w ? 'watched' : ''}">
-    <a class="thumb" href="${v.url}" target="_blank" rel="noopener"><img loading="lazy" alt="" src="https://i.ytimg.com/vi/${v.id}/mqdefault.jpg">${v.seconds != null ? `<span class="dur">${dur(v.seconds)}</span>` : ''}</a>
+    <a class="thumb" href="${attr(v.url)}" target="_blank" rel="noopener"><img loading="lazy" alt="" src="https://i.ytimg.com/vi/${attr(v.id)}/mqdefault.jpg">
+      ${fresh ? '<span class="new">NEW</span>' : ''}${v.seconds != null ? `<span class="dur">${dur(v.seconds)}</span>` : ''}</a>
     <div class="body">
-      <a class="title" href="${v.url}" target="_blank" rel="noopener">${esc(v.title)}</a>
-      <div class="meta">${showChannel ? `<b>${esc(v.channel)}</b> · ` : ''}${ago(v.published)} · ${new Date(v.published).toLocaleDateString(undefined, {day:'numeric', month:'short', year:'numeric'})}</div>
-      <label class="tick"><input type="checkbox" data-id="${v.id}" ${w ? 'checked' : ''}> ${w ? 'Watched' : 'Mark as watched'}</label>
+      ${showChannel ? `<div class="chan">${esc(v.channel)}</div>` : ''}
+      <a class="title" href="${attr(v.url)}" target="_blank" rel="noopener">${esc(v.title)}</a>
+      <div class="meta">${ago(v.published)} · ${new Date(v.published).toLocaleDateString(undefined, {day:'numeric', month:'short', year:'numeric'})}</div>
+      <label class="tick"><input type="checkbox" data-id="${attr(v.id)}" ${w ? 'checked' : ''}> ${w ? 'Watched' : 'Mark as watched'}</label>
     </div></article>`;
 }
 
 function render() {
-  const showAll = $('showWatched').checked, view = document.querySelector('input[name=view]:checked').value;
-  const chans = data.channels;
-  if (!chans.length || !chans.some(c => c.videos.length || c.error)) {
+  const showAll = $('showWatched').checked, chans = data.channels;
+  document.querySelector(`input[name=view][value=${prefs.view}]`).checked = true;
+  $('length').value = prefs.length;
+  if (!chans.some(c => c.videos.length || c.error)) {
     $('chips').innerHTML = '';
-    $('list').innerHTML = `<div class="empty big"><b>No videos yet</b>The first automatic check hasn't run. Click “Refresh”, or see the README for the one-time setup.</div>`;
+    $('list').innerHTML = `<div class="empty big"><b>No videos yet</b>The first automatic check hasn't run. Tap Refresh in a minute.<br><button onclick="location.reload()">Reload page</button></div>`;
     return;
   }
   const left = c => c.videos.filter(v => !isWatched(v)).length;
   const total = chans.reduce((n, c) => n + left(c), 0);
-  if (filter !== 'all' && !chans.some(c => c.name === filter)) filter = 'all';
+  if (prefs.filter !== 'all' && !chans.some(c => c.name === prefs.filter)) prefs.filter = 'all';
 
-  $('chips').innerHTML = `<button class="chip ${filter === 'all' ? 'on' : ''}" data-f="all">All<small>${total}</small></button>` +
-    chans.map(c => `<button class="chip ${filter === c.name ? 'on' : ''}" data-f="${esc(c.name)}">${esc(c.name)}<small>${left(c)}</small></button>`).join('');
+  $('chips').innerHTML = `<button class="chip ${prefs.filter === 'all' ? 'on' : ''}" data-f="all">All<small>${total}</small></button>` +
+    chans.map(c => `<button class="chip ${prefs.filter === c.name ? 'on' : ''}" data-f="${attr(c.name)}">${esc(c.name)}<small>${left(c)}</small></button>`).join('');
 
-  const visible = chans.filter(c => filter === 'all' || c.name === filter);
+  const shown = c => c.videos.filter(v => (showAll || !isWatched(v)) && lengthOk(v) && searchOk(v, c.name)).sort(byNewest);
+  const visible = chans.filter(c => prefs.filter === 'all' || c.name === prefs.filter);
   let html = '';
-  if (view === 'new') {
-    const all = visible.flatMap(c => c.videos.map(v => ({ ...v, channel: c.name })))
-      .filter(v => showAll || !isWatched(v)).sort((a, b) => new Date(b.published) - new Date(a.published));
-    html = all.length ? `<div class="grid">${all.map(v => card(v, true)).join('')}</div>` : allDone();
+  if (prefs.view === 'new') {
+    const all = visible.flatMap(c => shown(c).map(v => ({ ...v, channel: c.name }))).sort(byNewest);
+    const groups = new Map();
+    for (const v of all) { const g = dayGroup(v.published); (groups.get(g) || groups.set(g, []).get(g)).push(v); }
+    for (const [g, vids] of groups)
+      html += `<section class="group"><h2>${g}<span class="sub">${vids.length} video${vids.length > 1 ? 's' : ''}</span></h2><div class="grid">${vids.map(v => card(v, true)).join('')}</div></section>`;
+    if (!html) html = nothing();
   } else {
-    for (const c of visible) {
-      const vids = c.videos.filter(v => showAll || !isWatched(v));
-      if (!vids.length && filter === 'all' && !c.error) continue;   // hide finished channels in the main view
+    const rows = visible.map(c => ({ c, vids: shown(c) })).filter(r => r.vids.length || r.c.error && prefs.filter !== 'all');
+    rows.sort((a, b) => (b.vids[0] ? new Date(b.vids[0].published) : 0) - (a.vids[0] ? new Date(a.vids[0].published) : 0));
+    for (const { c, vids } of rows)
       html += `<section class="group"><h2>${esc(c.name)}<span class="sub">${left(c)} to watch</span>
-        ${left(c) > 1 ? `<button class="link" data-all="${esc(c.name)}">Mark all watched</button>` : ''}</h2>` +
+        ${left(c) > 1 ? `<button class="link" data-all="${attr(c.name)}">Mark all watched</button>` : ''}</h2>` +
         (vids.length ? `<div class="grid">${vids.map(v => card(v, false)).join('')}</div>`
-          : `<div class="empty ${c.error ? 'err' : ''}">${c.error ? 'Couldn’t load this channel: ' + esc(c.error) : 'All caught up ✓'}</div>`) + '</section>';
-    }
-    if (!html) html = allDone();
+          : `<div class="empty err">Couldn’t load this channel: ${esc(c.error)}</div>`) + '</section>';
+    if (!html) html = nothing();
   }
   $('list').innerHTML = html;
   $('status').textContent = `${total} to watch` + (data.updated ? ` · checked ${ago(data.updated)}` : '');
 }
-const allDone = () => `<div class="empty big"><b>🎉 All caught up!</b>Nothing left to watch. New videos appear here automatically.</div>`;
+function nothing() {
+  const filtering = $('search').value.trim() || prefs.length !== 'any';
+  return filtering
+    ? `<div class="empty big"><b>No matching videos</b>Try a different search or length.<br><button onclick="clearFilters()">Clear filters</button></div>`
+    : `<div class="empty big"><b>🎉 All caught up!</b>Nothing left to watch. New videos appear here automatically.</div>`;
+}
+function clearFilters() { $('search').value = ''; prefs.length = 'any'; savePrefs(); render(); }
 
 function toast(msg, undo) {
   $('toastMsg').textContent = msg; lastAction = undo; $('toast').classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), 6000);
 }
-$('undo').onclick = () => { if (lastAction) lastAction(); $('toast').classList.remove('show'); save(); render(); };
+$('undo').onclick = () => { if (lastAction) lastAction(); $('toast').classList.remove('show'); saveWatched(); render(); };
 
 $('list').addEventListener('change', e => {
   const id = e.target.dataset.id; if (!id) return;
   if (e.target.checked) { watched.add(id); toast('Marked as watched', () => watched.delete(id)); }
   else watched.delete(id);
-  save(); render();
+  saveWatched(); render();
 });
 $('list').addEventListener('click', e => {
   const name = e.target.dataset.all; if (!name) return;
   const ids = data.channels.find(c => c.name === name).videos.filter(v => !isWatched(v)).map(v => v.id);
-  ids.forEach(i => watched.add(i)); save(); render();
+  ids.forEach(i => watched.add(i)); saveWatched(); render();
   toast(`Marked ${ids.length} videos as watched`, () => ids.forEach(i => watched.delete(i)));
 });
 $('chips').addEventListener('click', e => {
   const b = e.target.closest('[data-f]'); if (!b) return;
-  filter = b.dataset.f; try { localStorage.setItem('yt-filter', filter); } catch (x) {} render();
+  prefs.filter = b.dataset.f; savePrefs(); render();
 });
-document.querySelectorAll('input[name=view]').forEach(r => r.addEventListener('change', render));
+document.querySelectorAll('input[name=view]').forEach(r => r.addEventListener('change', () => { prefs.view = r.value; savePrefs(); render(); }));
+$('length').addEventListener('change', e => { prefs.length = e.target.value; savePrefs(); render(); });
+$('search').addEventListener('input', render);
 $('showWatched').addEventListener('change', render);
 
 async function load() {
