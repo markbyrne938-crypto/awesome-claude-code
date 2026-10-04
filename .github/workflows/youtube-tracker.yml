@@ -22,7 +22,11 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
+    outputs:
+      start: ${{ steps.clock.outputs.start }}
     steps:
+      - id: clock
+        run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
@@ -48,11 +52,16 @@ jobs:
     if: ${{ always() && github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     steps:
-      - name: Wait until 10 minutes after this run started
+      - name: Wait until 10 minutes after the build started
         run: |
-          start=$(date -d "${{ github.run_started_at }}" +%s)
-          wait=$(( start + 590 - $(date +%s) ))
-          [ "$wait" -gt 0 ] && sleep "$wait" || true
+          now=$(date +%s)
+          start="${{ needs.build.outputs.start }}"
+          wait=$(( ${start:-$now} + 590 - now ))
+          # Never loop faster than once a minute, whatever goes wrong above.
+          [ "$wait" -lt 60 ] && wait=60
+          [ "$wait" -gt 600 ] && wait=600
+          echo "Sleeping ${wait}s"
+          sleep "$wait"
       - name: Start the next run
         env:
           GH_TOKEN: ${{ github.token }}
