@@ -1,0 +1,10 @@
+name: probe
+on:
+  push:
+    paths: ["youtube-tracker/diag/**"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install requests && python youtube-tracker/diag/probe.py
