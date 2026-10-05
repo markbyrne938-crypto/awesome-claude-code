@@ -1,6 +1,8 @@
 name: YouTube tracker website
-# GitHub's own cron is best-effort (and doesn't reliably fire at all in forks), so each run
-# starts the next one ~10 minutes later. The cron line is only a backup to restart the chain.
+# A normal scheduled refresh: each run takes ~30 seconds. GitHub runs it every 10 minutes
+# when it can (it may delay scheduled runs at busy times).
+# Do NOT bring back a self-restarting chain with sleeping jobs: keeping a runner busy around
+# the clock gets the account's hosted runners blocked.
 on:
   schedule:
     - cron: "*/10 * * * *"
@@ -12,21 +14,17 @@ permissions:
   contents: write
   pages: write
   id-token: write
-  actions: write
 concurrency:
   group: youtube-tracker
   cancel-in-progress: false
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
-    outputs:
-      start: ${{ steps.clock.outputs.start }}
     steps:
-      - id: clock
-        run: echo "start=$(date +%s)" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
@@ -45,24 +43,3 @@ jobs:
         with: { path: site }
       - id: deploy
         uses: actions/deploy-pages@v4
-
-  next:
-    # Runs even if the build failed, so one bad run (e.g. YouTube hiccup) never ends the chain.
-    needs: build
-    if: ${{ always() && github.ref == 'refs/heads/main' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait until 10 minutes after the build started
-        run: |
-          now=$(date +%s)
-          start="${{ needs.build.outputs.start }}"
-          wait=$(( ${start:-$now} + 590 - now ))
-          # Never loop faster than once a minute, whatever goes wrong above.
-          [ "$wait" -lt 60 ] && wait=60
-          [ "$wait" -gt 600 ] && wait=600
-          echo "Sleeping ${wait}s"
-          sleep "$wait"
-      - name: Start the next run
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh workflow run youtube-tracker.yml --repo "${{ github.repository }}" --ref main

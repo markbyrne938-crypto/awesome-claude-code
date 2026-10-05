@@ -290,7 +290,7 @@ function render() {
 }
 let lastTotal = 0;
 function updateStatus() {
-  const el = $('status'), stale = data.updated && Date.now() - new Date(data.updated) > 30 * 60000;
+  const el = $('status'), stale = data.updated && Date.now() - new Date(data.updated) > 45 * 60000;
   el.textContent = `${lastTotal} to watch` + (data.updated ? ` · checked ${ago(data.updated)}` : '') + (stale ? ' ⚠️ updates look delayed' : '');
   el.style.color = stale ? 'var(--accent)' : '';
 }
