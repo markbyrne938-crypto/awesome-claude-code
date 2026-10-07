@@ -16,7 +16,9 @@ permissions:
   id-token: write
 concurrency:
   group: youtube-tracker
-  cancel-in-progress: false
+  # A newer run replaces an older one that is still queued/waiting/running, so one stuck run
+  # (e.g. a deploy left "waiting" on GitHub's side) can never block every later update.
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: ubuntu-latest
