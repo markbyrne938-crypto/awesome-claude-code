@@ -1,12 +1,13 @@
 name: YouTube tracker website
-# A normal scheduled refresh: each run takes under a minute. The cron asks for every 10 minutes;
-# in practice GitHub starts scheduled runs about every 20-25 minutes, and sometimes pauses them.
-# If scheduled runs stop entirely, editing this file re-registers the schedule.
+# A normal scheduled refresh: each run takes under a minute. The cron asks for every 10 minutes
+# between 8am and 10pm UTC+2 (the owner's time zone), i.e. 06:00-19:50 UTC; GitHub cron is
+# always UTC. In practice GitHub starts scheduled runs about every 20-25 minutes, and sometimes
+# pauses them. If scheduled runs stop entirely, editing this file re-registers the schedule.
 # Do NOT bring back a self-restarting chain with sleeping jobs: keeping a runner busy around
 # the clock gets the account's hosted runners blocked.
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/10 6-19 * * *"    # 08:00-21:50 UTC+2
   workflow_dispatch:
   push:
     branches: [main]

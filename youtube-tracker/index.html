@@ -111,7 +111,7 @@
   <textarea id="restoreCode" rows="3" placeholder="Paste a backup code here"></textarea>
   <div class="row"><button id="restore">Restore</button><span class="sub" id="restored"></span><button id="closeBackup" style="margin-left:auto">Close</button></div>
 </dialog>
-<footer>Ticks are saved on this device and synced online (tap ☁ Sync). New uploads are checked about every 10 minutes.<br><span id="syncStatus"></span></footer>
+<footer>Ticks are saved on this device and synced online (tap ☁ Sync). New uploads are checked about every 10–25 minutes from 8am to 10pm.<br><span id="syncStatus"></span></footer>
 <div class="toast" id="toast"><span id="toastMsg"></span><button id="undo">Undo</button></div>
 <script>
 const $ = id => document.getElementById(id);
@@ -290,7 +290,9 @@ function render() {
 }
 let lastTotal = 0;
 function updateStatus() {
-  const el = $('status'), stale = data.updated && Date.now() - new Date(data.updated) > 45 * 60000;
+  // Updates only run 8am-10pm, so old data overnight / before the first morning run is expected.
+  const now = new Date(), hour = now.getHours() + now.getMinutes() / 60, activeHours = hour >= 8.75 && hour < 22.5;
+  const el = $('status'), stale = activeHours && data.updated && Date.now() - new Date(data.updated) > 45 * 60000;
   el.textContent = `${lastTotal} to watch` + (data.updated ? ` · checked ${ago(data.updated)}` : '') + (stale ? ' ⚠️ updates look delayed' : '');
   el.style.color = stale ? 'var(--accent)' : '';
 }
