@@ -1,6 +1,7 @@
 name: YouTube tracker website
-# A normal scheduled refresh: each run takes ~30 seconds. GitHub runs it every 10 minutes
-# when it can (it may delay scheduled runs at busy times).
+# A normal scheduled refresh: each run takes under a minute. The cron asks for every 10 minutes;
+# in practice GitHub starts scheduled runs about every 20-25 minutes, and sometimes pauses them.
+# If scheduled runs stop entirely, editing this file re-registers the schedule.
 # Do NOT bring back a self-restarting chain with sleeping jobs: keeping a runner busy around
 # the clock gets the account's hosted runners blocked.
 on:
