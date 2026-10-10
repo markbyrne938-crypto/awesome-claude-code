@@ -50,3 +50,18 @@ def test_is_recent():
     now = datetime(2026, 10, 4, tzinfo=timezone.utc)
     assert is_recent("2026-09-10T12:00:00+00:00", 31, now)
     assert not is_recent("2026-08-30T12:00:00+00:00", 31, now)
+
+
+def test_channel_search_prefers_exact_name():
+    import json
+    from fetch_videos import parse_channel_search, pick_channel
+    ch = lambda cid, title, subs: {"channelRenderer": {"channelId": cid, "title": {"simpleText": title},
+                                                       "videoCountText": {"simpleText": subs}}}
+    data = {"contents": [ch("UC1", "Ben Morris Music", "50K subscribers"),
+                         ch("UC2", "Ben Morris", "200K subscribers"),
+                         ch("UC3", "Ben Morris", "3K subscribers")]}
+    found = parse_channel_search(f"<script>var ytInitialData = {json.dumps(data)};</script>")
+    assert found[0] == ("UC1", "Ben Morris Music", "50K subscribers")
+    assert pick_channel(found, "Ben Morris")[0] == "UC2"            # first exact name match wins
+    assert pick_channel(found, "Steve Marsh")[0] == "UC1"           # no exact match: top result
+    assert pick_channel([("UC9", "SteveMarsh", "")], "Steve Marsh")[0] == "UC9"   # spaces ignored
