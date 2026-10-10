@@ -28,12 +28,21 @@ session.headers.update(UA)
 session.cookies.update(COOKIES)
 
 
-def find_channel_id(query):
-    """Return (channel_id, title) for the top channel search result."""
-    r = session.get("https://www.youtube.com/results",
-                    params={"search_query": query, "sp": "EgIQAg=="}, timeout=20)
-    r.raise_for_status()
-    m = re.search(r"var ytInitialData = (\{.*?\});</script>", r.text, re.S)
+def _text(o):
+    """Plain text of a YouTube text object ({"simpleText": ...} or {"runs": [...]})."""
+    if not isinstance(o, dict):
+        return ""
+    if "simpleText" in o:
+        return o["simpleText"]
+    return "".join(r.get("text", "") for r in o.get("runs", []))
+
+
+def parse_channel_search(html):
+    """Channel results on a search page, in YouTube's order: [(id, title, info)].
+
+    info is the handle / subscriber count text shown under the result.
+    """
+    m = re.search(r"var ytInitialData = (\{.*?\});</script>", html, re.S)
     if not m:
         raise RuntimeError("search page format not recognised")
     found = []
@@ -42,8 +51,9 @@ def find_channel_id(query):
         if isinstance(o, dict):
             if "channelRenderer" in o:
                 c = o["channelRenderer"]
-                title = c.get("title", {}).get("simpleText", "")
-                found.append((c["channelId"], title))
+                info = " · ".join(t for t in (_text(c.get("subscriberCountText")),
+                                              _text(c.get("videoCountText"))) if t)
+                found.append((c["channelId"], _text(c.get("title")), info))
             for v in o.values():
                 walk(v)
         elif isinstance(o, list):
@@ -51,9 +61,31 @@ def find_channel_id(query):
                 walk(v)
 
     walk(json.loads(m.group(1)))
-    if not found:
+    return found
+
+
+def _norm(s):
+    return re.sub(r"[^a-z0-9]", "", s.lower())
+
+
+def pick_channel(candidates, query):
+    """Prefer a channel named exactly like the query (ignoring case, spaces and punctuation);
+    otherwise YouTube's top result."""
+    for c in candidates:
+        if _norm(c[1]) == _norm(query):
+            return c
+    return candidates[0]
+
+
+def find_channel_id(query):
+    """Return ((channel_id, title, info), all_candidates) for a channel name."""
+    r = session.get("https://www.youtube.com/results",
+                    params={"search_query": query, "sp": "EgIQAg=="}, timeout=20)
+    r.raise_for_status()
+    candidates = parse_channel_search(r.text)
+    if not candidates:
         raise RuntimeError("no channel found")
-    return found[0]
+    return pick_channel(candidates, query), candidates
 
 
 def parse_feed(xml_text):
@@ -161,10 +193,14 @@ def main():
     for ch in config["channels"]:
         name = ch["name"]
         try:
-            if not ch.get("id"):
-                ch["id"], found_title = find_channel_id(ch.get("search", name))
+            new_match = not ch.get("id")
+            if new_match:
+                (ch["id"], found_title, info), candidates = find_channel_id(ch.get("search", name))
                 changed = True
-                print(f"{name}: matched channel '{found_title}' ({ch['id']})")
+                print(f"{name}: matched channel '{found_title}' ({ch['id']}) {info}")
+                others = [f"'{t}' ({i})" for cid, t, i in candidates[:5] if cid != ch["id"]]
+                if others:
+                    print(f"{name}:   other search results: " + "; ".join(others))
             r = session.get("https://www.youtube.com/feeds/videos.xml",
                             params={"channel_id": ch["id"]}, timeout=20)
             r.raise_for_status()
@@ -178,8 +214,11 @@ def main():
                     load()
                 except Exception as exc:  # no info for this list; still show the videos
                     print(f"{name}: could not read {label} list ({exc})", file=sys.stderr)
+            feed = parse_feed(r.text)
+            if new_match and feed:
+                print(f"{name}:   newest upload: '{feed[0]['title']}' ({feed[0]['published'][:10]})")
             videos = []
-            for v in parse_feed(r.text):
+            for v in feed:
                 if not keep_video(v["id"], lengths, shorts, lives) or not is_recent(v["published"], max_age):
                     continue
                 seconds = lengths.get(v["id"]) or previous.get(v["id"], {}).get("seconds")
