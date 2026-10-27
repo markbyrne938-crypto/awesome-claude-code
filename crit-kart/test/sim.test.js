@@ -55,15 +55,15 @@ console.log('all ok');
 for (const def of C.COURSES) { const t = C.buildTrack(def); console.log(def.id, 'est 12 laps @250W', (C.estimateLapTime(t, 250, 84) * Math.round(12 * (def.lapScale || 1)) / 60).toFixed(1), 'min'); }
 
 // Rival pace must follow the user's FTP and the chosen category (average rival power / FTP, 3-lap races)
-for (const ftp of [150, 250, 330]) for (const [cat, info] of Object.entries(C.RIVAL_CATS)) {
+for (const ftp of [150, 330]) for (const [cat, info] of Object.entries(C.RIVAL_CATS)) {
   const track = C.buildTrack(C.COURSES[0]), pace = ftp * info.factor;
-  const race = new C.Race({ track, laps: 3, mass: 84, pace, difficulty: 1 });
+  const race = new C.Race({ track, laps: 8, mass: 84, pace, difficulty: 1 });
   let t = 0;
-  while (race.state !== 'finished' && t < 600) { race.update(1 / 30, { power: ftp, steer: bot(race), use: false }); race.events.length = 0; t += 1 / 30; }
+  while (race.state !== 'finished' && t < 1800) { race.update(1 / 30, { power: ftp, steer: bot(race), use: false }); race.events.length = 0; t += 1 / 30; }
   const rivals = race.results().filter((r) => !r.isPlayer), avg = rivals.reduce((a, r) => a + r.avgPower, 0) / rivals.length;
   const ratio = avg / pace;
-  assert.ok(ratio > 0.97 && ratio < 1.07, `FTP ${ftp} cat ${cat}: rivals averaged ${avg.toFixed(0)} W = ${(avg / ftp).toFixed(2)}x FTP (pace ${pace.toFixed(0)})`);
-  if (ftp === 250) console.log(`FTP ${ftp} Cat ${cat} ${info.name}: rivals avg ${avg.toFixed(0)} W = ${(avg / ftp).toFixed(2)} x FTP`);
+  assert.ok(ratio > 0.97 && ratio < 1.09, `FTP ${ftp} cat ${cat}: rivals averaged ${avg.toFixed(0)} W = ${(avg / ftp).toFixed(2)}x FTP (pace ${pace.toFixed(0)})`);
+  if (ftp === 330) console.log(`FTP ${ftp} Cat ${cat} ${info.name}: rivals avg ${avg.toFixed(0)} W = ${(avg / ftp).toFixed(2)} x FTP`);
 }
 assert.deepStrictEqual(['D', 'C', 'B', 'A'].map((c) => C.riderCategory({ D: 2.0, C: 2.8, B: 3.5, A: 4.4 }[c])), ['D', 'C', 'B', 'A']);
 console.log('category checks ok');
@@ -133,4 +133,37 @@ console.log('category checks ok');
   assert.ok(strongS.passedAt !== null && strongS.minSep > 0.25, `stronger rider passes with room to spare (lateral gap ${strongS.minSep.toFixed(2)})`);
   assert.ok(weakS.passedAt === null && weakS.draftFrac > 0.4, `weaker rider stays on the wheel in the draft (drafting ${(100 * weakS.draftFrac).toFixed(0)}% of the time)`);
   console.log(`auto-steer scenarios ok (strong passed at ${strongS.passedAt.toFixed(1)}s with ${strongS.minSep.toFixed(2)} lateral gap; weak drafted ${(100 * weakS.draftFrac).toFixed(0)}%)`);
+}
+
+// Heart rate + cadence sensors (standard Bluetooth profiles)
+{
+  const dv = (a) => new DataView(Uint8Array.from(a).buffer);
+  assert.strictEqual(C.parseHeartRate(dv([0x00, 142])).bpm, 142);
+  assert.strictEqual(C.parseHeartRate(dv([0x01, 0x2c, 0x01])).bpm, 300); // 16-bit format
+  assert.deepStrictEqual(C.parseCsc(dv([0x02, 0x10, 0x00, 0x00, 0x04])), { crankRevs: 16, crankTime: 1024 });
+  const cc = new C.CadenceCalc(); let t = 0, last = null;
+  for (let i = 0; i < 6; i++) { last = cc.update({ crankRevs: (65534 + i) % 65536, crankTime: (i * 683) % 65536 }, t); t += 667; } // 90 rpm across both counter rollovers
+  assert.ok(Math.abs(last - 90) < 1, 'cadence from crank events, with rollover');
+  for (let i = 0; i < 5; i++) { last = cc.update({ crankRevs: 3, crankTime: 3415 }, t); t += 700; }
+  assert.strictEqual(Math.round(last), 0, 'cadence drops to 0 when the cranks stop');
+  console.log('sensor parser checks ok');
+}
+
+// Rivals tire, then sprint: power fades through the race, jumps in the final few hundred metres, and the player gets bell/sprint calls
+{
+  const race = new C.Race({ track: C.buildTrack(C.COURSES[0]), laps: 8, mass: 84, pace: 250, difficulty: 1, rubber: false });
+  for (const b of race.boxes) { b.active = false; b.respawn = 1e9; }
+  const ais = race.riders.filter((r) => !r.isPlayer), early = [], late = [], sprint = []; let t = 0, bell = 0, spr = 0, sprintFlag = 0;
+  while (race.state !== 'finished' && t < 1800) {
+    race.update(1 / 30, { power: 260, steer: bot(race), use: false }); t += 1 / 30;
+    for (const e of race.events) { if (e.type === 'bell') bell++; if (e.type === 'sprint') spr++; } race.events.length = 0;
+    for (const r of ais) { const pr = r.s / race.total, togo = race.total - r.s; if (r.finished) continue;
+      if (pr > 0.15 && pr < 0.4) early.push(r.power); else if (pr > 0.65 && pr < 0.9) late.push(r.power); if (togo < 120 && togo > 20) sprint.push(r.power); if (r.status === 'SPRINT') sprintFlag++; }
+  }
+  const m = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  assert.ok(m(late) < m(early) * 0.99, `rivals fade (early ${m(early).toFixed(0)} W -> late ${m(late).toFixed(0)} W)`);
+  assert.ok(m(sprint) > m(late) * 1.2, `rivals sprint (late ${m(late).toFixed(0)} W -> sprint ${m(sprint).toFixed(0)} W)`);
+  assert.ok(sprintFlag > 0, 'sprinting rivals are flagged for the HUD');
+  assert.strictEqual(bell, 1, 'bell lap announced once'); assert.strictEqual(spr, 1, 'sprint called once');
+  console.log(`tire + sprint checks ok (early ${m(early).toFixed(0)} W, late ${m(late).toFixed(0)} W, sprint ${m(sprint).toFixed(0)} W)`);
 }

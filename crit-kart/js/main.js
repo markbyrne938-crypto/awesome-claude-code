@@ -12,7 +12,7 @@
 
   const cfg = {
     course: store.get('course', 'meadow'), laps: store.get('laps', 12), ftp: store.get('ftp', null), weight: store.get('weight', 75),
-    cat: store.get('cat', 'B'), rubber: store.get('rubber', true), steer: store.get('steer', 'manual'), autoItems: store.get('autoItems', true), gradeFeel: store.get('gradeFeel', 0.7), invertSteer: store.get('invertSteer', false),
+    cat: store.get('cat', 'B'), rubber: store.get('rubber', true), steer: store.get('steer', 'manual'), autoItems: store.get('autoItems', true), maxHr: store.get('maxHr', null), mirror: store.get('mirror', true), fitMap: store.get('fitMap', true), gradeFeel: store.get('gradeFeel', 0.7), invertSteer: store.get('invertSteer', false),
     mode: store.get('mode', 'single'), sens: store.get('sens', 1), sound: store.get('sound', true),
   };
   const state = {
@@ -21,6 +21,8 @@
     place: 0, placeCand: 0, placeTimer: 0, wake: null,
   };
   const trainer = { link: null, connected: false, power: 0, cadence: 0, lastSeen: 0, reconnecting: false };
+  const hr = { link: null, connected: false, bpm: 0, lastSeen: 0 };
+  const cad = { link: null, connected: false, rpm: 0, lastSeen: 0, calc: new C.CadenceCalc() };
   const ride = { link: null, connected: false, idle: null, held: 0, latest: {}, msgs: 0, map: store.get('steerMap', null), use: false, bound: store.get('boundBtn', null), cal: null, binding: false };
   const keys = {};
   const kb = { steer: 0, power: 0 };
@@ -85,6 +87,37 @@
       trainer.connected = true; trainer.lastSeen = performance.now();
     } catch (e) { setStatus('trainerStatus', 'Trainer: ' + e.message, true); trainer.link = null; trainer.connected = false; }
   });
+
+  // ---------- Heart rate monitor + cadence sensor ----------
+  const fresh3 = (o, now) => o.connected && now - o.lastSeen < 3500;
+  $('btnHr').addEventListener('click', async () => {
+    if (!hasBle) return setStatus('hrStatus', 'Web Bluetooth not available (use Chrome or Edge)', true);
+    try {
+      if (hr.link) hr.link.disconnect();
+      hr.link = new C.HeartRateLink({
+        onStatus: (s) => { setStatus('hrStatus', s); log('hr: ' + s); },
+        onDisconnect: () => { hr.connected = false; },
+        onData: (d) => { if (d.bpm > 20 && d.bpm < 260) { hr.connected = true; hr.bpm = d.bpm; hr.lastSeen = performance.now(); } },
+      });
+      setStatus('hrStatus', 'Connecting…'); await hr.link.connect(); hr.connected = true; hr.lastSeen = performance.now();
+    } catch (e) { setStatus('hrStatus', 'Heart rate: ' + e.message, true); hr.connected = false; }
+  });
+  $('btnCad').addEventListener('click', async () => {
+    if (!hasBle) return setStatus('cadStatus', 'Web Bluetooth not available (use Chrome or Edge)', true);
+    try {
+      if (cad.link) cad.link.disconnect();
+      cad.calc = new C.CadenceCalc();
+      cad.link = new C.CadenceLink({
+        onStatus: (s) => { setStatus('cadStatus', s); log('cadence: ' + s); },
+        onDisconnect: () => { cad.connected = false; },
+        onData: (d) => { const r = cad.calc.update(d, performance.now()); if (r !== null) { cad.connected = true; cad.rpm = r; cad.lastSeen = performance.now(); } },
+      });
+      setStatus('cadStatus', 'Connecting…'); await cad.link.connect(); cad.connected = true; cad.lastSeen = performance.now();
+    } catch (e) { setStatus('cadStatus', 'Cadence: ' + e.message, true); cad.connected = false; }
+  });
+  // a dedicated cadence sensor wins over the trainer's own figure
+  const cadenceNow = (now) => (fresh3(cad, now) ? cad.rpm : trainer.link && trainer.connected && now - trainer.lastSeen < 3500 ? trainer.cadence : 0);
+  const hrNow = (now) => (fresh3(hr, now) ? hr.bpm : 0);
 
   // ---------- Zwift Ride controls ----------
   $('btnRide').addEventListener('click', async () => {
@@ -267,6 +300,10 @@
 
   $('invert').checked = cfg.invertSteer; $('invert').addEventListener('change', () => { cfg.invertSteer = $('invert').checked; store.set('invertSteer', cfg.invertSteer); });
   $('sound').checked = cfg.sound; $('sound').addEventListener('change', () => { setSound($('sound').checked); play('pickup'); });
+  $('maxHr').value = cfg.maxHr == null ? '' : cfg.maxHr;
+  $('maxHr').addEventListener('input', () => { const t = $('maxHr').value.trim(), v = t === '' ? null : Number(t); cfg.maxHr = v && v >= 120 && v <= 230 ? v : null; store.set('maxHr', cfg.maxHr); });
+  $('mirror').checked = cfg.mirror; $('mirror').addEventListener('change', () => { cfg.mirror = $('mirror').checked; store.set('mirror', cfg.mirror); });
+  $('fitMap').checked = cfg.fitMap; $('fitMap').addEventListener('change', () => { cfg.fitMap = $('fitMap').checked; store.set('fitMap', cfg.fitMap); });
   $('rubber').checked = cfg.rubber; $('rubber').addEventListener('change', () => { cfg.rubber = $('rubber').checked; store.set('rubber', cfg.rubber); });
   function refreshLabels() {
     const def = C.COURSES.find((c) => c.id === cfg.course) || C.COURSES[0];
@@ -450,7 +487,7 @@
       if (cfg.invertSteer) steer = -steer;
       steer = clamp(steer * cfg.sens, -1, 1);
       const power = trainer.link ? (fresh ? trainer.power : 0) : kb.power; // a dropped trainer never silently becomes keyboard power
-      const input = { power, steer, use: ride.use, cadence: trainer.link && fresh ? trainer.cadence : 0 };
+      const input = { power, steer, use: ride.use, cadence: cadenceNow(now) };
       ride.use = false;
       for (let rem = dt; rem > 1e-4; rem -= 1 / 60) { race.update(Math.min(rem, 1 / 60), input); input.use = false; }
       handleEvents(race);
@@ -476,7 +513,7 @@
     if (race) {
       const p = race.player;
       renderer.render(race, state.paused ? 0 : dt, {
-        power: p.pw, cadence: trainer.link ? (trainer.connected ? trainer.cadence : 0) : (p.v > 0.5 ? clamp(p.pw / 3.2 + 40, 40, 130) : 0), ftp: cfg.ftp, weight: cfg.weight,
+        power: p.pw, cadence: cadenceNow(now) || (trainer.link ? 0 : (p.v > 0.5 ? Math.round(p.rpm) : 0)), hr: hrNow(now), maxHr: cfg.maxHr || 190, ftp: cfg.ftp, weight: cfg.weight,
         toasts: state.toasts, incoming: state.incoming > 0, menu: state.mode === 'menu',
         warning: race.state === 'racing' && staleTrainer && !state.paused ? '⚠ NO POWER SIGNAL' : '',
         chips: [

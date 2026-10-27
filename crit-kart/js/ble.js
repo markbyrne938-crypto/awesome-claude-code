@@ -11,6 +11,10 @@
     FTMS_INDOOR_BIKE: 0x2ad2,
     FTMS_CONTROL_POINT: 0x2ad9,
     // Zwift Ride / Play / Click controllers (reverse-engineered by the community, not an official API)
+    HRS: 0x180d,
+    HRS_MEASUREMENT: 0x2a37,
+    CSC: 0x1816,
+    CSC_MEASUREMENT: 0x2a5b,
     ZWIFT_RIDE: '0000fc82-0000-1000-8000-00805f9b34fb',
     ZWIFT_ASYNC: '00000002-19ca-4651-86e5-fa29dcdd09d1',
     ZWIFT_SYNC_RX: '00000003-19ca-4651-86e5-fa29dcdd09d1',
@@ -245,5 +249,54 @@
     disconnect() { try { this.device && this.device.gatt.disconnect(); } catch (e) { /* ignore */ } }
   }
 
-  Object.assign(C, { UUID, parseFtmsBikeData, parseCyclingPower, parseProto, decodeZwiftMessage, TrainerLink, ZwiftRideLink, hexBytes: hex });
+  // ---- Heart rate monitor (0x180D / 0x2A37) and cadence sensor (CSC 0x1816 / 0x2A5B): standard profiles ----
+
+  // Heart Rate Measurement: flags(u8); bit0 = 16-bit value, else 8-bit. Energy / RR fields (bits 3,4) follow and are ignored.
+  function parseHeartRate(dv) {
+    const flags = dv.getUint8(0);
+    return { bpm: flags & 0x01 ? dv.getUint16(1, true) : dv.getUint8(1) };
+  }
+
+  // CSC Measurement: flags(u8); bit0 wheel data (u32 revs, u16 time), bit1 crank data (u16 revs, u16 time); times in 1/1024 s.
+  function parseCsc(dv) {
+    const flags = dv.getUint8(0); let o = 1; const out = {};
+    if (flags & 0x01) { out.wheelRevs = dv.getUint32(o, true); out.wheelTime = dv.getUint16(o + 4, true); o += 6; }
+    if (flags & 0x02) { out.crankRevs = dv.getUint16(o, true); out.crankTime = dv.getUint16(o + 2, true); }
+    return out;
+  }
+
+  // Cadence (rpm) from successive crank readings. Returns null until it has two readings; 0 when the cranks stop.
+  class CadenceCalc {
+    constructor() { this.last = null; this.lastChange = 0; this.rpm = 0; }
+    update(m, nowMs) {
+      if (m.crankRevs === undefined) return null;
+      if (this.last) {
+        const dr = (m.crankRevs - this.last.revs + 65536) % 65536, dt = ((m.crankTime - this.last.time + 65536) % 65536) / 1024;
+        if (dr > 0 && dt > 0 && dt < 5) { this.rpm = (dr / dt) * 60; this.lastChange = nowMs; this.last = { revs: m.crankRevs, time: m.crankTime }; }
+        else if (nowMs - this.lastChange > 2500) this.rpm = 0; // same event repeated for a while = not pedalling
+      } else { this.last = { revs: m.crankRevs, time: m.crankTime }; this.lastChange = nowMs; return null; }
+      return this.rpm;
+    }
+  }
+
+  // One notify characteristic from one standard service.
+  class SensorLink {
+    constructor(cb, service, characteristic, parse) { this.cb = cb; this.service = service; this.characteristic = characteristic; this.parse = parse; }
+    async connect() {
+      const dev = await navigator.bluetooth.requestDevice({ filters: [{ services: [this.service] }], optionalServices: [this.service] });
+      this.device = dev;
+      dev.addEventListener('gattserverdisconnected', () => { this.cb.onStatus('Disconnected'); this.cb.onDisconnect && this.cb.onDisconnect(); });
+      const server = await dev.gatt.connect();
+      const svc = await server.getPrimaryService(this.service);
+      const ch = await svc.getCharacteristic(this.characteristic);
+      ch.addEventListener('characteristicvaluechanged', (e) => { try { this.cb.onData(this.parse(e.target.value)); } catch (err) { /* ignore malformed packet */ } });
+      await ch.startNotifications();
+      this.cb.onStatus(`${dev.name || 'Sensor'} connected`);
+    }
+    disconnect() { try { this.device && this.device.gatt.disconnect(); } catch (e) { /* ignore */ } }
+  }
+  const HeartRateLink = class extends SensorLink { constructor(cb) { super(cb, UUID.HRS, UUID.HRS_MEASUREMENT, parseHeartRate); } };
+  const CadenceLink = class extends SensorLink { constructor(cb) { super(cb, UUID.CSC, UUID.CSC_MEASUREMENT, parseCsc); } };
+
+  Object.assign(C, { parseHeartRate, parseCsc, CadenceCalc, HeartRateLink, CadenceLink, UUID, parseFtmsBikeData, parseCyclingPower, parseProto, decodeZwiftMessage, TrainerLink, ZwiftRideLink, hexBytes: hex });
 })();

@@ -38,7 +38,7 @@
       this.s = 0; this.x = 0; this.v = 0; this.power = 0; this.pw = 0; this.steer = 0; this.lean = 0;
       this.item = null; this.stun = 0; this.boost = 0; this.shield = 0; this.invuln = 0; this.draft = 0;
       this.finished = false; this.finishTime = null; this.lap = 1; this.phase = Math.random() * 6; this.grade = 0;
-      this.vx = 0; this.pend = 0; this.rpm = 0; this.cadence = 0; this.cadF = 0.94 + Math.random() * 0.12; this.ghost = 1; this.pSum = 0; this.pT = 0; this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
+      this.vx = 0; this.pend = 0; this.rpm = 0; this.cadence = 0; this.cadF = 0.94 + Math.random() * 0.12; this.ghost = 1; this.status = ''; this.pSum = 0; this.pT = 0; this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
       this.ai = null;
     }
   }
@@ -60,7 +60,8 @@
       for (let i = 0; i < slots; i++) {
         let r;
         if (i === playerSlot) r = player;
-        else { const [n, c] = aiList.shift(); r = new Rider(n, c, false); r.ai = { f: rand(0.96, 1.04), lane: rand(-0.6, 0.6), itemT: 0, attackT: rand(15, 40), attacking: 0, phase: Math.random() * 6, sloppy: Math.random() < 0.3 }; }
+        else { const [n, c] = aiList.shift(); r = new Rider(n, c, false); const stamina = rand(0.8, 1.2); r.ai = { f: rand(0.96, 1.04), lane: rand(-0.6, 0.6), itemT: 0, attackT: rand(15, 40), attacking: 0, phase: Math.random() * 6, sloppy: Math.random() < 0.3,
+          stamina, fade: 0.10 - 0.07 * (stamina - 0.8) / 0.4, wMax: 16000 * rand(0.8, 1.3), sprintStart: rand(160, 320), sprintMult: rand(1.3, 1.7), sprinting: false }; r.ai.wBal = r.ai.wMax; }
         const row = Math.floor(i / 2), col = i % 2;
         r.s = -(row * 2.8 + 1.5); r.x = col ? 0.35 : -0.35;
         this.riders.push(r);
@@ -159,6 +160,8 @@
         this.emit('finish', { rider: r, place: this.riders.filter((o) => o.finished).length });
       }
       if (r.isPlayer) {
+        if (!this._bell && r.lap === this.laps && this.laps > 1) { this._bell = true; this.emit('bell', {}); }
+        if (!this._sprintCall && this.total - r.s < 300) { this._sprintCall = true; this.emit('sprint', {}); }
         const lapNow = Math.floor(Math.max(0, r.s) / this.length);
         if (r._lapSeen === undefined) { r._lapSeen = lapNow; r._lapStart = 0; }
         else if (lapNow > r._lapSeen && lapNow > 0) {
@@ -287,15 +290,29 @@
     updateAI(r, dt) {
       const a = r.ai, t = this.time, p = this.player;
       if (this.state === 'countdown') { r.power = 0; return; }
-      const grade = this.track.gradeAt(r.s);
-      let w = this.pace * a.f * this.diff * (1 + clamp(grade * 3, -0.2, 0.25));
+      const grade = this.track.gradeAt(r.s), progress = clamp(r.s / this.total, 0, 1), togo = this.total - r.s;
+      // Pacing: a touch fresh at the start, then fading over the race (stamina decides how much). `cp` is what they can sustain right now.
+      const cp0 = this.pace * a.f * this.diff, cp = cp0 * (1.06 - a.fade * progress);
+      let w = cp * (1 + clamp(grade * 3, -0.2, 0.25));
       w *= 1 + 0.04 * Math.sin(t * 0.7 + a.phase);
+      // Attacks need a reserve (W'): they drain it, easy riding refills it slowly, and an empty reserve means a tired rider.
       a.attackT -= dt;
-      if (a.attacking > 0) { a.attacking -= dt; w *= 1.2; if (a.attacking <= 0) a.attackT = rand(30, 60); }
-      else if (a.attackT <= 0) a.attacking = rand(5, 9);
+      if (a.attacking > 0) { a.attacking -= dt; w *= 1.25; if (a.attacking <= 0) a.attackT = rand(30, 60); }
+      else if (a.attackT <= 0 && a.wBal > 0.6 * a.wMax) a.attacking = rand(5, 9);
+      else if (a.attackT <= 0) a.attackT = rand(8, 15);
+      const over = w - cp;
+      a.wBal = clamp(a.wBal - (over > 0 ? over * dt : over * dt * 0.3), 0, a.wMax);
+      if (a.wBal <= 0 && over > 0) { w = cp * 0.96; a.attacking = 0; }
+      // The finish: everyone who can goes for it. A rider with energy left sprints hard; an empty one barely lifts.
+      if (!a.sprinting && togo < a.sprintStart && this.state === 'racing') a.sprinting = true;
+      if (a.sprinting && !r.finished) {
+        const left = clamp(0.35 + 0.65 * (a.wBal / a.wMax), 0.35, 1);
+        w = cp * (1 + (a.sprintMult - 1) * left);
+      }
+      r.status = a.sprinting && !r.finished ? 'SPRINT' : a.attacking > 0 ? 'ATTACK' : (a.wBal < 0.2 * a.wMax || a.fade * progress > 0.05) && progress > 0.25 ? 'TIRED' : '';
       const gap = r.s - p.s;
       // optional rubber band (small, so rival power stays tied to your FTP): ease off when far ahead, chase a little when dropped
-      if (this.rubber) { if (gap > 80) w *= 1 - clamp((gap - 80) / 400, 0, 0.06); else if (gap < -80) w *= 1 + clamp((-gap - 80) / 400, 0, 0.08); }
+      if (this.rubber && !a.sprinting) { if (gap > 80) w *= 1 - clamp((gap - 80) / 400, 0, 0.06); else if (gap < -80) w *= 1 + clamp((-gap - 80) / 400, 0, 0.08); }
       r.power = Math.max(0, w);
 
       // steering: lane + box seeking + hazard dodging

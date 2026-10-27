@@ -440,7 +440,7 @@
       const S = (v) => v * ui;
       ctx.save();
       // power panel
-      const px = S(16), py = S(16), pw = S(250), ph = S(150);
+      const px = S(16), py = S(16), pw = S(290), ph = S(150);
       panel(ctx, px, py, pw, ph);
       const ratio = hud.ftp ? hud.power / hud.ftp : 0, zc = zoneColor(ratio);
       text(ctx, String(Math.round(hud.power)), px + S(16), py + S(52), S(68), zc, 'left');
@@ -448,7 +448,11 @@
       ctx.fillStyle = 'rgba(0,0,0,.18)'; rrect(ctx, px + S(16), py + S(92), pw - S(32), S(14), S(7)); ctx.fill();
       ctx.fillStyle = zc; rrect(ctx, px + S(16), py + S(92), Math.max(S(8), (pw - S(32)) * clamp(ratio / 1.6, 0, 1)), S(14), S(7)); ctx.fill();
       text(ctx, `${(hud.power / hud.weight).toFixed(1)} W/kg`, px + S(16), py + S(128), S(20), '#fff');
-      text(ctx, `${hud.cadence ? Math.round(hud.cadence) : '--'} rpm`, px + S(140), py + S(128), S(20), '#fff');
+      text(ctx, `${hud.cadence ? Math.round(hud.cadence) : '--'} rpm`, px + S(112), py + S(128), S(20), '#fff');
+      { const pct = hud.hr ? hud.hr / (hud.maxHr || 190) : 0, hc = !hud.hr ? '#b8bcc8' : pct < 0.6 ? '#9aa5b1' : pct < 0.7 ? '#4dabf7' : pct < 0.8 ? '#51cf66' : pct < 0.9 ? '#ffa94d' : '#ff5a5f';
+        const hx = px + S(206), hy = py + S(128);
+        ctx.save(); ctx.translate(hx, hy); ctx.scale(S(1), S(1)); ctx.beginPath(); ctx.moveTo(0, 6); ctx.bezierCurveTo(-12, -2, -8, -12, 0, -6); ctx.bezierCurveTo(8, -12, 12, -2, 0, 6); ctx.fillStyle = hc; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke(); ctx.restore();
+        text(ctx, hud.hr ? String(Math.round(hud.hr)) : '--', hx + S(18), hy, S(20), hud.hr ? '#fff' : '#d0d3dc'); }
       text(ctx, `${(p.v * 3.6).toFixed(1)} km/h`, px + S(16), py + ph + S(22), S(22), '#fff');
       const gp = p.grade * 100, gcol = gp > 0.5 ? '#ff922b' : gp < -0.5 ? '#51cf66' : '#fff';
       text(ctx, `${gp > 0.5 ? '▲' : gp < -0.5 ? '▼' : '►'} ${Math.abs(gp).toFixed(1)}%`, px + S(150), py + ph + S(22), S(22), gcol);

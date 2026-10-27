@@ -57,6 +57,9 @@
     finish: () => arp([523, 659, 784, 1047, 784, 1047], 0.11, { type: 'square', vol: 0.3 }),
     bump: () => { tone(110, 0.16, { type: 'sine', slide: -40, vol: 0.6 }); noise(0.08, 0.3); },
     clunk: () => { tone(220, 0.12, { type: 'triangle', slide: -120, vol: 0.5 }); noise(0.12, 0.35); },
+    bell: () => { arp([1568, 1175, 1568, 1175], 0.16, { type: 'sine', vol: 0.5 }); },
+    sprintCall: () => { tone(500, 0.35, { type: 'sawtooth', slide: 700, vol: 0.28 }); tone(1000, 0.2, { type: 'square', vol: 0.2, delay: 0.3 }); },
+    horn: () => { tone(392, 0.45, { type: 'sawtooth', vol: 0.33 }); tone(494, 0.45, { type: 'sawtooth', vol: 0.28 }); },
     error: () => tone(200, 0.3, { type: 'sawtooth', vol: 0.3 }),
   };
 

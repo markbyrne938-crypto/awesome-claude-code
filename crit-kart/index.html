@@ -130,6 +130,16 @@
             <button id="btnRide" type="button">Connect</button>
             <div class="sub2"><i id="rideStatusDot" class="dot"></i><span id="rideStatus" class="status" role="status" aria-live="polite">Not connected</span></div>
           </div>
+          <div class="gear">
+            <b>Heart rate monitor</b>
+            <button id="btnHr" type="button">Connect</button>
+            <div class="sub2"><i id="hrStatusDot" class="dot"></i><span id="hrStatus" class="status" role="status" aria-live="polite">Not connected</span></div>
+          </div>
+          <div class="gear">
+            <b>Cadence sensor <span class="unit">(if your trainer doesn't report it)</span></b>
+            <button id="btnCad" type="button">Connect</button>
+            <div class="sub2"><i id="cadStatusDot" class="dot"></i><span id="cadStatus" class="status" role="status" aria-live="polite">Not connected</span></div>
+          </div>
           <details><summary>Calibrate &amp; test the controls</summary>
             <div class="hint">Close Zwift / Companion first (only one app can use the controls).</div>
             <div class="row"><button id="btnCal" class="alt small" type="button">Calibrate steering</button><button id="btnBind" class="alt small" type="button">Choose item button</button><button id="btnUnbind" class="alt small" type="button">Any button</button></div>
@@ -190,6 +200,9 @@
           <label class="chk"><input id="invert" type="checkbox"> Invert steering</label>
           <label class="chk"><input id="sound" type="checkbox"> Sound effects</label>
           <label class="chk"><input id="rubber" type="checkbox"> Keep the bunch together (small rubber band)</label>
+          <label class="chk"><input id="mirror" type="checkbox"> Rear-view mirror</label>
+          <label class="chk"><input id="fitMap" type="checkbox"> Add a virtual map to saved rides (.fit)</label>
+          <label for="maxHr" style="margin-top:10px">Max heart rate (bpm, for HR colours)</label><input id="maxHr" type="number" inputmode="numeric" min="120" max="230" placeholder="190">
         </div>
       </div>
       <div class="hint"><kbd>M</kbd> mute · <kbd>F</kbd> fullscreen · <kbd>T</kbd> steering on/off · <kbd>Esc</kbd>/<kbd>P</kbd> pause · click or tap the screen to use an item</div>
