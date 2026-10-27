@@ -55,6 +55,8 @@
     up: () => tone(600, 0.12, { type: 'triangle', slide: 300, vol: 0.3 }),
     down: () => tone(500, 0.14, { type: 'triangle', slide: -250, vol: 0.25 }),
     finish: () => arp([523, 659, 784, 1047, 784, 1047], 0.11, { type: 'square', vol: 0.3 }),
+    bump: () => { tone(110, 0.16, { type: 'sine', slide: -40, vol: 0.6 }); noise(0.08, 0.3); },
+    clunk: () => { tone(220, 0.12, { type: 'triangle', slide: -120, vol: 0.5 }); noise(0.12, 0.35); },
     error: () => tone(200, 0.3, { type: 'sawtooth', vol: 0.3 }),
   };
 

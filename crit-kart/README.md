@@ -43,7 +43,10 @@ The Zwift Ride protocol is not public and I could not check it against a device.
 
 * **Physics**: real power-to-speed model (gravity, rolling resistance, aero drag, up to 38 % drag saving when drafting). Rivals use the same model, with attacks, gentle rubber-banding and a "Rival strength" slider.
 * **Item boxes** (`?`): Banana Peel, Bidon Bomb (homing, rider ahead), Energy Gel (+45 % power for 5 s), Bubble Shield, Golden Bidon (hits the leader; only handed out to riders in the back half).
-* **Courses**: Sunny Meadows Crit (~500 m), Candy Canyon (steep, ~560 m), Neon Harbor Night Crit (technical, ~450 m). The menu estimates your race time from your FTP.
+* **Technical sections**: every course now has narrow stretches with barriers (scraping a wall slows you), tight corners and hairpins, **speed bumps** (cost speed, make you hop), **cone slaloms**, **potholes** and **barrel rows with a gap**. Knocked-over cones and barrels reset after a while; shields block barrel hits. Rivals dodge most obstacles but make mistakes. A HUD warning tells you what's coming.
+* **Camera**: the view now pitches with the road ahead so descents keep the road on screen instead of showing mostly sky.
+* **Riders**: a more naturalistic rear view (jointed legs, tapered kit with pockets, aero helmet, spoked wheel, varied skin tones and kit designs).
+* **Courses**: Sunny Meadows Crit (~520 m), Candy Canyon (steep and narrow, ~580 m, 3/4 of the laps), Neon Harbor Night Crit (the technical one, ~500 m). The menu estimates your race time from your FTP.
 * **Championship**: all three courses in a row, 10-8-6-5-4-3-2-1 points, final standings and a champion title.
 * **Results**: average / normalized power, W/kg, best lap, and a per-second power chart coloured by zone against your FTP.
 * **Safety nets**: a dropped trainer pauses the race and auto-reconnects (it never silently falls back to keyboard power); the race pauses when the tab is hidden; the screen is kept awake during races; "no power signal" warning if data stalls.

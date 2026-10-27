@@ -219,22 +219,23 @@
   $('sound').checked = cfg.sound; $('sound').addEventListener('change', () => { setSound($('sound').checked); play('pickup'); });
   function refreshLabels() {
     const def = C.COURSES.find((c) => c.id === cfg.course) || C.COURSES[0];
-    const est = (d) => C.estimateLapTime(C.buildTrack(d), cfg.ftp, cfg.weight + 9) * cfg.laps / 60;
+    const est = (d) => C.estimateLapTime(C.buildTrack(d), cfg.ftp, cfg.weight + 9) * lapsFor(d) / 60;
     if (cfg.mode === 'champ') {
-      $('courseBlurb').textContent = `Championship: ${C.COURSES.map((c) => c.name).join(' → ')}. ${cfg.laps} laps each (about ${C.COURSES.map((c) => est(c).toFixed(0)).join(' / ')} min at ${cfg.ftp} W solo). Points 10-8-6-5-4-3-2-1.`;
+      $('courseBlurb').textContent = `Championship: ${C.COURSES.map((c) => c.name).join(' → ')}. ${C.COURSES.map((c) => lapsFor(c)).join(' / ')} laps (about ${C.COURSES.map((c) => est(c).toFixed(0)).join(' / ')} min at ${cfg.ftp} W). Points 10-8-6-5-4-3-2-1.`;
     } else {
       const t = C.buildTrack(def), len = Math.round(t.length);
-      $('courseBlurb').textContent = `${def.blurb} Lap ${len} m • ${cfg.laps} laps = ${(len * cfg.laps / 1000).toFixed(1)} km — about ${est(def).toFixed(1)} min riding at ${cfg.ftp} W solo (less in the draft).`;
+      $('courseBlurb').textContent = `${def.blurb} Lap ${len} m • ${lapsFor(def)} laps = ${(len * lapsFor(def) / 1000).toFixed(1)} km — about ${est(def).toFixed(1)} min at ${cfg.ftp} W (less in the draft).`;
     }
     courseSel.disabled = cfg.mode === 'champ';
     $('lapsVal').textContent = cfg.laps; $('diffVal').textContent = cfg.difficulty.toFixed(2) + '×'; $('feelVal').textContent = Math.round(cfg.gradeFeel * 100) + '%'; $('sensVal').textContent = cfg.sens.toFixed(1) + '×';
   }
   if (!hasBle) $('bleWarn').hidden = false;
 
+  const lapsFor = (def) => Math.max(2, Math.round(cfg.laps * (def.lapScale || 1)));
   const currentCourseId = () => (state.champ ? state.champ.rounds[state.champ.round] : cfg.course);
   function makeRace() {
     const def = C.COURSES.find((c) => c.id === currentCourseId()) || C.COURSES[0];
-    return new C.Race({ track: C.buildTrack(def), laps: cfg.laps, mass: cfg.weight + 9, pace: cfg.ftp * 0.88, difficulty: cfg.difficulty });
+    return new C.Race({ track: C.buildTrack(def), laps: lapsFor(def), mass: cfg.weight + 9, pace: cfg.ftp * 0.88, difficulty: cfg.difficulty });
   }
   function makeDemo() { if (state.mode === 'menu') state.race = makeRace(); }
 
@@ -275,7 +276,10 @@
       else if (e.type === 'hit' && mine) { toast('OUCH! You got hit!', '#ff6b6b'); play('hit'); }
       else if (e.type === 'hit' && !mine && e.source !== 'banana') toast(`${e.rider.name} got bombed!`, '#ffd7e8');
       else if (e.type === 'blocked' && mine) { toast('Shield blocked it!', '#9ee7ff'); play('blocked'); }
-      else if (e.type === 'incoming') { state.incoming = 3; play('incoming'); }
+      else if (e.type === 'obstacle' && mine) {
+        toast({ bump: 'Speed bump!', cone: 'Cone! Weave!', pothole: 'Pothole!', barrel: 'Barrel crash!' }[e.kind], '#ffd9a0', 1.4);
+        play(e.kind === 'bump' ? 'bump' : 'clunk');
+      } else if (e.type === 'incoming') { state.incoming = 3; play('incoming'); }
       else if (e.type === 'notarget') toast('No target ahead', '#ccc');
       else if (e.type === 'lap') {
         state.lapTimes.push(e.lapTime);

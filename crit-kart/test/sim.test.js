@@ -21,22 +21,35 @@ const C = globalThis.Crit;
   assert.strictEqual(msg.buttonMap, 0xffffffff); assert.deepStrictEqual(msg.analog, [{ loc: 2, val: -35 }]);
 }
 
+// A simple test rider: holds the centre line but dodges cones, barrels and potholes like a human would.
+function bot(race) {
+  const p = race.player, L = race.length, lim = race.track.wallsAt(p.s) ? 0.75 : 1;
+  let tx = 0;
+  for (const o of race.track.obstacles) {
+    if (o.type === 'bump' || o.down) continue;
+    const d = ((o.s - p.s) % L + L) % L;
+    if (d > 0 && d < 22 && Math.abs(o.x - p.x) < 0.3) { tx = o.x + (o.x > 0 ? -0.5 : 0.5); break; }
+  }
+  tx = Math.max(-lim, Math.min(lim, tx));
+  return Math.max(-1, Math.min(1, (tx - p.x) * 3));
+}
+
 // Physics: ~200 W flat should be ~33-35 km/h
 for (const def of C.COURSES) {
   const track = C.buildTrack(def);
   assert.ok(Math.abs(track.ys[track.N]) < 1e-6, 'elevation loop closes');
-  const race = new C.Race({ track, laps: 12, mass: 84, pace: 230, difficulty: 1 });
+  const nLaps = Math.round(12 * (def.lapScale || 1)); const race = new C.Race({ track, laps: nLaps, mass: 84, pace: 230, difficulty: 1 });
   let t = 0, pT = null, laps = [];
   while (race.state !== 'finished' && t < 1500) {
-    race.update(1 / 30, { power: 250, steer: Math.max(-1, Math.min(1, -race.player.x * 3)), use: false }); t += 1 / 30;
+    race.update(1 / 30, { power: 250, steer: bot(race), use: false }); t += 1 / 30;
     if (race.player.finished && pT === null) pT = race.time;
     for (const e of race.events) if (e.type === 'lap') laps.push(e); race.events.length = 0;
     for (const r of race.riders) assert.ok(Number.isFinite(r.s) && Number.isFinite(r.v) && Math.abs(r.x) <= 1.3 + 1e-9);
   }
   const res = race.results();
-  console.log(`${def.id}: lap ${track.length.toFixed(0)} m, player 12 laps in ${(pT / 60).toFixed(1)} min, place ${res.find(r => r.isPlayer).place}, hazards ${race.hazards.length}`);
-  assert.strictEqual(laps.length, 12, 'one lap event per completed lap'); assert.ok(laps.slice(0, 11).every((l) => l.lapTime > 20 && !l.final) && laps[11].final);
-  assert.ok(pT > 8 * 60 && pT < 14 * 60, 'race length ~10 min');
+  console.log(`${def.id}: lap ${track.length.toFixed(0)} m, player ${nLaps} laps in ${(pT / 60).toFixed(1)} min, place ${res.find(r => r.isPlayer).place}, hazards ${race.hazards.length}`);
+  assert.strictEqual(laps.length, nLaps, 'one lap event per completed lap'); assert.ok(laps.slice(0, nLaps - 1).every((l) => l.lapTime > 20 && !l.final) && laps[nLaps - 1].final);
+  assert.ok(pT > 8 * 60 && pT < 14 * 60, 'race length 8-14 min at 250 W');
 }
 console.log('all ok');
-for (const def of C.COURSES) { const t = C.buildTrack(def); console.log(def.id, 'est 12 laps @250W', (C.estimateLapTime(t, 250, 84) * 12 / 60).toFixed(1), 'min'); }
+for (const def of C.COURSES) { const t = C.buildTrack(def); console.log(def.id, 'est 12 laps @250W', (C.estimateLapTime(t, 250, 84) * Math.round(12 * (def.lapScale || 1)) / 60).toFixed(1), 'min'); }

@@ -26,6 +26,7 @@
       this.s = 0; this.x = 0; this.v = 0; this.power = 0; this.pw = 0; this.steer = 0; this.lean = 0;
       this.item = null; this.stun = 0; this.boost = 0; this.shield = 0; this.invuln = 0; this.draft = 0;
       this.finished = false; this.finishTime = null; this.lap = 1; this.phase = Math.random() * 6; this.grade = 0;
+      this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
       this.ai = null;
     }
   }
@@ -45,7 +46,7 @@
       for (let i = 0; i < slots; i++) {
         let r;
         if (i === playerSlot) r = player;
-        else { const [n, c] = aiList.shift(); r = new Rider(n, c, false); r.ai = { f: rand(0.88, 1.1), lane: rand(-0.6, 0.6), itemT: 0, attackT: rand(15, 40), attacking: 0, phase: Math.random() * 6 }; }
+        else { const [n, c] = aiList.shift(); r = new Rider(n, c, false); r.ai = { f: rand(0.88, 1.1), lane: rand(-0.6, 0.6), itemT: 0, attackT: rand(15, 40), attacking: 0, phase: Math.random() * 6, sloppy: Math.random() < 0.3 }; }
         const row = Math.floor(i / 2), col = i % 2;
         r.s = -(row * 3.2 + 1.5); r.x = col ? 0.35 : -0.35;
         this.riders.push(r);
@@ -115,9 +116,14 @@
 
       // lateral
       const k = Math.min(1, r.v / 4);
+      const w = this.track.widthAt(r.s), walled = this.track.wallsAt(r.s);
       const push = this.track.curveAt(r.s) * 0.07 * Math.pow(r.v / 10, 2);
-      r.x += (r.steer * 1.1 * k - push) * dt;
-      r.x = clamp(r.x, -1.3, 1.3);
+      r.x += ((r.steer * 1.1 * k - push) / w) * dt; // narrower road = same sideways speed in metres, more in road fractions
+      r.scrape = Math.max(0, r.scrape - dt);
+      if (walled) {
+        const lim = 0.97;
+        if (Math.abs(r.x) > lim) { r.x = clamp(r.x, -lim, lim); r.v = Math.max(0, r.v - 6 * dt); r.scrape = 0.25; } // grinding along the barrier
+      } else r.x = clamp(r.x, -1.3, 1.3);
       r.lean += (clamp(r.steer, -1, 1) - r.lean) * Math.min(1, dt * 6);
 
       // light bumping so riders don't overlap exactly
@@ -141,7 +147,45 @@
       }
     }
 
+    hitObstacle(r, o) {
+      const kind = o.type;
+      if (kind === 'bump') {
+        r.v *= clamp(1 - 0.05 - r.v * 0.006, 0.78, 0.95); r.hop = 0.35;
+        this.emit('obstacle', { rider: r, kind });
+      } else if (kind === 'cone') {
+        r.v *= 0.65; r.wobble = 0.7; o.down = true; o.downT = this.time;
+        this.emit('obstacle', { rider: r, kind });
+      } else if (kind === 'pothole') {
+        r.v *= 0.78; r.wobble = 0.5; r.hop = 0.2;
+        this.emit('obstacle', { rider: r, kind });
+      } else if (kind === 'barrel') {
+        o.down = true; o.downT = this.time;
+        this.emit('obstacle', { rider: r, kind });
+        this.hit(r, 1.0, 'barrel');
+      }
+    }
+
+    updateObstacles(dt) {
+      const obs = this.track.obstacles, L = this.length, R = C.OBSTACLE_RADIUS;
+      for (const o of obs) if (o.down && o.type !== 'pothole' && this.time - o.downT > 25) o.down = false;
+      for (const r of this.riders) {
+        r.hop = Math.max(0, r.hop - dt); r.wobble = Math.max(0, r.wobble - dt);
+        if (r.finished || this.state === 'countdown') continue;
+        for (let i = 0; i < obs.length; i++) {
+          const o = obs[i];
+          if (o.down && o.type !== 'bump' && o.type !== 'pothole') continue;
+          const d = ((o.s - r.s) % L + L * 1.5) % L - L / 2;
+          if (Math.abs(d) > 0.9) continue;
+          if (o.type !== 'bump' && Math.abs(o.x - r.x) > R[o.type]) continue;
+          if (r.obsLast === i && this.time - r.obsT < 1.5) continue;
+          r.obsLast = i; r.obsT = this.time;
+          this.hitObstacle(r, o);
+        }
+      }
+    }
+
     updateWorld(dt) {
+      this.updateObstacles(dt);
       for (const b of this.boxes) { if (!b.active) { b.respawn -= dt; if (b.respawn <= 0) b.active = true; } }
       for (const r of this.riders) {
         if (r.item || r.finished) continue;
@@ -247,6 +291,13 @@
         const d = ((h.s - r.s) % this.length + this.length) % this.length;
         if (d > 0 && d < 28 && Math.abs(h.x - r.x) < 0.32) { tx = h.x + (h.x > 0 ? -0.55 : 0.55); break; }
       }
+      for (const o of this.track.obstacles) {
+        if (o.type === 'bump' || o.down) continue;
+        const d = ((o.s - r.s) % this.length + this.length) % this.length;
+        if (d > 0 && d < 26 && Math.abs(o.x - r.x) < 0.3 && !(a.sloppy && ((o.s * 7) | 0) % 2)) { tx = o.x + (o.x > r.x || (o.x === r.x && o.x > 0) ? -0.5 : 0.5); break; }
+      }
+      const lim = this.track.wallsAt(r.s) ? 0.78 : 1.1;
+      tx = clamp(tx, -lim, lim);
       r.steer = clamp((tx - r.x) * 3, -1, 1);
 
       // item use
@@ -279,7 +330,7 @@
       if (s >= track.length * 2 && !mark) { mark = t; }
       if (s >= track.length * 3) lapT = t - mark;
     }
-    return lapT;
+    return lapT * 1.15; // allowance for the standing start, cornering and obstacles
   }
 
   Object.assign(C, { Race, Rider, ITEMS, CDA, estimateLapTime });
