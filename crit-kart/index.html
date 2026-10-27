@@ -157,6 +157,14 @@
           <label for="laps">Laps: <span id="lapsVal"></span></label>
           <input id="laps" type="range" min="2" max="16" step="1">
 
+          <label style="margin-top:16px" id="steerLabel">Steering</label>
+          <div class="seg" id="steerSeg" role="group" aria-labelledby="steerLabel">
+            <button type="button" data-v="manual" aria-pressed="true">On</button>
+            <button type="button" data-v="auto" aria-pressed="false">Off: auto-follow</button>
+          </div>
+          <div id="steerHint" class="hint"></div>
+          <label class="chk" id="autoItemsRow" hidden><input id="autoItems" type="checkbox"> Use items automatically</label>
+
           <label style="margin-top:16px" id="catLabel">Rival category</label>
           <div class="seg cats" id="catSeg" role="group" aria-labelledby="catLabel">
             <button type="button" data-v="D" aria-pressed="false"><b>D</b><span>Social</span></button>
@@ -184,7 +192,7 @@
           <label class="chk"><input id="rubber" type="checkbox"> Keep the bunch together (small rubber band)</label>
         </div>
       </div>
-      <div class="hint"><kbd>M</kbd> mute · <kbd>F</kbd> fullscreen · <kbd>Esc</kbd>/<kbd>P</kbd> pause</div>
+      <div class="hint"><kbd>M</kbd> mute · <kbd>F</kbd> fullscreen · <kbd>T</kbd> steering on/off · <kbd>Esc</kbd>/<kbd>P</kbd> pause · click or tap the screen to use an item</div>
       <details><summary>Bluetooth debug log</summary><div class="row"><button id="btnCopyLog" class="alt small" type="button">Copy log</button><button id="btnClearLog" class="alt small" type="button">Clear</button><button id="btnFull" class="alt small" type="button">Fullscreen</button></div><pre id="log"></pre></details>
     </details>
   </div>

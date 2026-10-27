@@ -13,7 +13,7 @@ cd crit-kart
 python3 -m http.server 8000     # then open http://localhost:8000
 ```
 
-No trainer? Play with the keyboard: `↑/↓` watts, `←/→` steer, `Space` use item, `Esc`/`P` pause, `M` mute, `F` fullscreen.
+No trainer? Play with the keyboard: `↑/↓` watts, `←/→` steer, `Space` (or a click/tap) use item, `T` steering on/off, `Esc`/`P` pause, `M` mute, `F` fullscreen.
 
 ## How it talks to your gear
 
@@ -41,7 +41,7 @@ The Zwift Ride protocol is not public and I could not check it against a device.
 
 ## Gameplay
 
-* **Physics**: real power-to-speed model (gravity, rolling resistance, aero drag, up to 38 % drag saving when drafting). Rivals use the same model, with attacks, gentle rubber-banding and a "Rival strength" slider.
+* **Physics**: real power-to-speed model (gravity, rolling resistance, aero drag, up to 38 % drag saving when drafting). Rivals use the same model, with attacks and an optional small rubber band; their pace comes from your FTP and the rival category you pick.
 * **Item boxes** (`?`): Banana Peel, Bidon Bomb (homing, rider ahead), Energy Gel (+45 % power for 5 s), Bubble Shield, Golden Bidon (hits the leader; only handed out to riders in the back half).
 * **Technical sections**: every course now has narrow stretches with barriers (scraping a wall slows you), tight corners and hairpins, **speed bumps** (cost speed, make you hop), **cone slaloms**, **potholes** and **barrel rows with a gap**. Knocked-over cones and barrels reset after a while; shields block barrel hits. Rivals dodge most obstacles but make mistakes. A HUD warning tells you what's coming.
 * **Zwift-style proportions**: a ~9 m two-lane road, riders about a quarter of the road width, a raised chase camera looking down on the rider, gentle sweeping bends (45-120 m radius) with the odd tighter corner, and obstacles/barriers/scenery sized to match. Riders show a three-quarter angle through bends. Speed is conveyed by short stripes, roadside bollards, a widening field of view and edge streaks.
@@ -57,6 +57,7 @@ The Zwift Ride protocol is not public and I could not check it against a device.
   | A · Hard | 1.10 x FTP | clearly above FTP |
 
   (Each rival varies +-4 % and attacks now and then, so the figures are averages; they're pinned by `test/sim.test.js`.) The menu shows your own Zwift-style category from W/kg (A 4.0+, B 3.2+, C 2.5+, D below) and previews the rivals' watts. Results list every rider's average power. You start at the back of the grid with the bunch ahead in view, and a Zwift-style leaderboard lists all eight with live gaps (the camera is behind you, so riders behind aren't on screen).
+* **Steering off (no controller needed)**: in the Race section set **Steering** to *Off: auto-follow*. Your rider then holds the wheel of the rider in front to get the draft, pulls out to the freer side and overtakes when you're going faster (it stays tucked in until it's nearly on their wheel, or pulls out early if you're clearly quicker), dodges cones, barrels and potholes, keeps off the barriers, and grabs item boxes when that doesn't cost the draft. Items can be used automatically (checkbox), or by clicking/tapping the screen or pressing Space. Press **T** during a race to switch steering on/off. Finishing position then depends on your power, not on steering skill.
 * **No collisions**: as in Zwift, riders pass straight through each other (no shoving at the start or in the pack). Overlapping rivals turn slightly see-through so a crowded grid or a pass stays readable.
 * **Courses**: Sunny Meadows Crit (~520 m), Candy Canyon (steep and narrow, ~580 m, 3/4 of the laps), Neon Harbor Night Crit (the technical one, ~500 m). The menu estimates your race time from your FTP.
 * **Championship**: all three courses in a row, 10-8-6-5-4-3-2-1 points, final standings and a champion title.

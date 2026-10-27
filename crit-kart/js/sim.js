@@ -47,6 +47,8 @@
     // opts: track, laps, mass (rider+bike, kg), pace (watts for an average AI rider), difficulty (0.8..1.2)
     constructor(opts) {
       this.track = opts.track; this.laps = opts.laps; this.mass = opts.mass; this.pace = opts.pace; this.diff = opts.difficulty || 1; this.rubber = opts.rubber !== false;
+      this.autoSteer = !!opts.autoSteer;      // steering off: the player's rider follows the wheel ahead and overtakes when faster
+      this.autoItems = opts.autoItems !== false; // with auto-steer on, also use items automatically
       this.length = this.track.length; this.total = this.laps * this.length;
       this.time = -4; this.state = 'countdown'; this.events = []; this.hazards = []; this.projectiles = [];
       this.riders = [];
@@ -80,11 +82,12 @@
       const racing = this.state !== 'countdown';
       const p = this.player;
       p.power = input.power;
-      p.steer = input.steer;
+      p.steer = this.autoSteer ? this.autoSteerFor(p) : input.steer;
 
       for (const r of this.riders) {
         if (!r.isPlayer) this.updateAI(r, dt);
         if (r.isPlayer && input.use) this.useItem(r);
+        if (r.isPlayer && this.autoSteer && this.autoItems && racing && r.item) this.autoUseItem(r, dt, r._itemSt || (r._itemSt = { itemT: rand(1.5, 3.5) }));
         this.stepRider(r, dt, racing);
       }
       this.updateWorld(dt);
@@ -108,7 +111,7 @@
       for (const o of this.riders) {
         if (o === r) continue;
         const d = o.s - r.s;
-        if (d > 0.4 && d < 9 && Math.abs(o.x - r.x) < 0.22) best = Math.max(best, 1 - d / 9);
+        if (d > 0.4 && d < 9 && Math.abs(o.x - r.x) < 0.3) best = Math.max(best, (1 - d / 9) * (1 - 0.5 * Math.abs(o.x - r.x) / 0.3));
       }
       r.draft += (best - r.draft) * Math.min(1, dt * 4);
 
@@ -130,7 +133,7 @@
       // lateral
       const k = Math.min(1, r.v / 4);
       const w = this.track.widthAt(r.s), walled = this.track.wallsAt(r.s);
-      const push = this.track.curveAt(r.s) * 0.07 * Math.pow(r.v / 10, 2);
+      const push = this.track.curveAt(r.s) * 0.045 * Math.pow(r.v / 10, 2);
       r.x += ((r.steer * 0.9 * k - push) / w) * dt; // narrower road = same sideways speed in metres, more in road fractions
       r.scrape = Math.max(0, r.scrape - dt);
       if (walled) {
@@ -314,17 +317,58 @@
       tx = clamp(tx, -lim, lim);
       r.steer = clamp((tx - r.x) * 3, -1, 1);
 
-      // item use
-      if (r.item) {
-        a.itemT -= dt;
-        if (a.itemT <= 0) {
-          a.itemT = rand(1, 3);
-          const kind = r.item;
-          const behind = this.riders.some((o) => { const d = r.s - o.s; return d > 1 && d < 30; });
-          const ahead = this.riders.some((o) => { const d = o.s - r.s; return d > 1 && d < 200; });
-          if ((kind === 'banana' && behind) || (kind === 'rocket' && ahead) || kind === 'boost' || kind === 'shield' || (kind === 'golden' && this.leader() !== r)) this.useItem(r);
-        }
+      if (r.item) this.autoUseItem(r, dt, a);
+    }
+
+    // Sensible automatic item use, shared by the AI and by a player with steering/items on auto.
+    autoUseItem(r, dt, st) {
+      st.itemT -= dt;
+      if (st.itemT > 0) return;
+      st.itemT = rand(1, 3);
+      const kind = r.item;
+      const behind = this.riders.some((o) => { const d = r.s - o.s; return d > 1 && d < 30; });
+      const ahead = this.riders.some((o) => { const d = o.s - r.s; return d > 1 && d < 200; });
+      if ((kind === 'banana' && behind) || (kind === 'rocket' && ahead) || kind === 'boost' || kind === 'shield' || (kind === 'golden' && this.leader() !== r)) this.useItem(r);
+    }
+
+    // Steering for a rider who can't steer. Sit in the wheel of the rider ahead (that's where the draft is); if we're going
+    // faster than them, pull out to the freer side and pass, then pick up the next wheel. Always dodge obstacles and grab
+    // boxes that don't cost us the draft.
+    autoSteerFor(r) {
+      const L = this.length, lim = this.track.wallsAt(r.s) ? 0.75 : 0.95, st = r._auto || (r._auto = { ot: null });
+      // the wheel to follow: close ahead AND close to our line (a rider two lanes over is no use for the draft)
+      let lead = st.lead && !st.lead.finished && st.lead.s - r.s > 0.3 && st.lead.s - r.s < 30 ? st.lead : null, bd = lead ? lead.s - r.s : 30, bestScore = lead ? bd + 14 * Math.abs(lead.x - r.x) - 4 : 1e9; // sticky: keep the current leader unless a clearly better one appears
+      for (const o of this.riders) { if (o === r || o.finished) continue; const d = o.s - r.s; if (d <= 0.3 || d >= 30) continue; const sc = d + 14 * Math.abs(o.x - r.x); if (sc < bestScore) { bestScore = sc; lead = o; bd = d; } }
+      st.lead = lead;
+      let tx = 0;
+      if (st.ot) { // finish the pass we started
+        const t = st.ot.rider, d = t.s - r.s;
+        if (d < -3 || d > 40) st.ot = null; else tx = t.x + st.ot.side * 0.5;
       }
+      if (!st.ot && lead) {
+        const closing = r.v - lead.v;
+        // clearly faster: pull out early. Only slightly faster (we just creep up in the draft): stay tucked in until we're nearly on their wheel.
+        const trigger = closing > 0.6 ? clamp(3 + 3 * closing, 3, 10) : 1.8;
+        if (bd < trigger && closing > 0.05) {
+          let side = lead.x > 0.1 ? -1 : lead.x < -0.1 ? 1 : (r.x >= lead.x ? 1 : -1); // toward the middle of the road
+          const free = (sd) => { const cx = lead.x + sd * 0.5; return Math.abs(cx) <= lim && !this.riders.some((o) => o !== r && o !== lead && !o.finished && o.s - r.s > -2 && o.s - r.s < 14 && Math.abs(o.x - cx) < 0.25); };
+          if (!free(side) && free(-side)) side = -side;
+          st.ot = { rider: lead, side }; tx = lead.x + side * 0.5;
+        } else tx = lead.x;
+      }
+      if (!r.item && !st.ot) { // boxes: only small detours while tucked in behind someone
+        const reach = lead && bd < 12 ? 0.3 : 0.9; let best = 45, box = null;
+        for (const b of this.boxes) { if (!b.active || Math.abs(b.x) > lim) continue; const d = ((b.s - r.s) % L + L) % L; if (d > 2 && d < best && Math.abs(b.x - tx) < reach) { best = d; box = b; } }
+        if (box) tx = box.x;
+      }
+      for (const h of this.hazards) { const d = ((h.s - r.s) % L + L) % L; if (d > 0 && d < 28 && Math.abs(h.x - r.x) < 0.32) { tx = h.x + (h.x > 0 ? -0.55 : 0.55); break; } }
+      for (const o of this.track.obstacles) {
+        if (o.type === 'bump' || o.down) continue;
+        const d = ((o.s - r.s) % L + L) % L;
+        if (d > 0 && d < 26 && Math.abs(o.x - r.x) < 0.3) { tx = o.x + (o.x > r.x || (o.x === r.x && o.x > 0) ? -0.5 : 0.5); break; }
+      }
+      tx = clamp(tx, -lim, lim);
+      return clamp((tx - r.x) * 3.2, -1, 1);
     }
 
     results() {

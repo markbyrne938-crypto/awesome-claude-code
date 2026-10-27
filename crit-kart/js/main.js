@@ -12,7 +12,7 @@
 
   const cfg = {
     course: store.get('course', 'meadow'), laps: store.get('laps', 12), ftp: store.get('ftp', null), weight: store.get('weight', 75),
-    cat: store.get('cat', 'B'), rubber: store.get('rubber', true), gradeFeel: store.get('gradeFeel', 0.7), invertSteer: store.get('invertSteer', false),
+    cat: store.get('cat', 'B'), rubber: store.get('rubber', true), steer: store.get('steer', 'manual'), autoItems: store.get('autoItems', true), gradeFeel: store.get('gradeFeel', 0.7), invertSteer: store.get('invertSteer', false),
     mode: store.get('mode', 'single'), sens: store.get('sens', 1), sound: store.get('sound', true),
   };
   const state = {
@@ -195,6 +195,7 @@
     if (state.mode === 'race' && !state.paused && (e.code === 'Space' || e.code === 'Enter' || e.code === 'KeyE') && !e.repeat) ride.use = true;
     if ((e.code === 'Escape' || e.code === 'KeyP') && state.mode === 'race' && !state.resultsShown) (state.paused ? resumeGame() : pauseGame(''));
     if (e.code === 'KeyM') setSound(!cfg.sound);
+    if (e.code === 'KeyT' && state.mode === 'race' && state.race) setAutoSteer(!state.race.autoSteer);
     if (e.code === 'KeyF') toggleFullscreen();
   });
   window.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -205,6 +206,15 @@
   async function acquireWake() { try { if (navigator.wakeLock && !state.wake) { state.wake = await navigator.wakeLock.request('screen'); state.wake.addEventListener('release', () => { state.wake = null; }); } } catch (e) { /* optional */ } }
   function releaseWake() { try { state.wake && state.wake.release(); } catch (e) { /* ignore */ } state.wake = null; }
   $('btnFull').addEventListener('click', toggleFullscreen);
+
+  function setAutoSteer(on) {
+    cfg.steer = on ? 'auto' : 'manual'; store.set('steer', cfg.steer);
+    if (state.race) state.race.autoSteer = on;
+    $('steerSeg').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === cfg.steer)));
+    toast(on ? 'Steering off: auto-follow' : 'Steering on', '#fff', 1.6); refreshLabels();
+  }
+  // click / tap anywhere on the race view to use the held item (handy on touch screens and with no keyboard)
+  $('game').addEventListener('pointerdown', () => { if (state.mode === 'race' && !state.paused && !state.resultsShown) ride.use = true; });
 
   function pauseGame(msg) { if (state.mode !== 'race') return; state.paused = true; state.pauseMsg = msg || ''; }
   function resumeGame() { state.paused = false; state.pauseMsg = ''; ride.use = false; }
@@ -252,7 +262,8 @@
     group.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { cfg[key] = b.dataset.v; store.set(key, cfg[key]); sync(); refreshLabels(); }));
     sync();
   };
-  seg('modeSeg', 'mode'); seg('catSeg', 'cat');
+  seg('modeSeg', 'mode'); seg('catSeg', 'cat'); seg('steerSeg', 'steer');
+  $('autoItems').checked = cfg.autoItems; $('autoItems').addEventListener('change', () => { cfg.autoItems = $('autoItems').checked; store.set('autoItems', cfg.autoItems); if (state.race) state.race.autoItems = cfg.autoItems; });
 
   $('invert').checked = cfg.invertSteer; $('invert').addEventListener('change', () => { cfg.invertSteer = $('invert').checked; store.set('invertSteer', cfg.invertSteer); });
   $('sound').checked = cfg.sound; $('sound').addEventListener('change', () => { setSound($('sound').checked); play('pickup'); });
@@ -269,6 +280,10 @@
       $('courseBlurb').textContent = `${def.blurb} Lap ${len} m • ${lapsFor(def)} laps = ${(len * lapsFor(def) / 1000).toFixed(1)} km${timeNote}`;
     }
     $('course').disabled = cfg.mode === 'champ';
+    $('steerHint').textContent = cfg.steer === 'auto'
+      ? 'Your rider follows the wheel in front for the draft, pulls out to overtake when you are going faster, and dodges obstacles. No controller needed.'
+      : 'Steer with the Zwift Ride controls or the keyboard arrows.';
+    $('autoItemsRow').hidden = cfg.steer !== 'auto';
     $('lapsVal').textContent = cfg.laps; $('feelVal').textContent = Math.round(cfg.gradeFeel * 100) + '%'; $('sensVal').textContent = cfg.sens.toFixed(1) + '×';
 
     // your category badge + what the rivals will ride
@@ -295,7 +310,7 @@
   function makeRace() {
     const def = C.COURSES.find((c) => c.id === currentCourseId()) || C.COURSES[0];
     const ftp = ftpValid() ? cfg.ftp : 200, wt = weightValid() ? cfg.weight : 75; // (fallbacks only for the menu backdrop)
-    return new C.Race({ track: C.buildTrack(def), laps: lapsFor(def), mass: wt + 9, pace: ftp * C.RIVAL_CATS[cfg.cat].factor, difficulty: 1, rubber: cfg.rubber });
+    return new C.Race({ track: C.buildTrack(def), laps: lapsFor(def), mass: wt + 9, pace: ftp * C.RIVAL_CATS[cfg.cat].factor, difficulty: 1, rubber: cfg.rubber, autoSteer: cfg.steer === 'auto', autoItems: cfg.autoItems });
   }
   function makeDemo() { if (state.mode === 'menu') state.race = makeRace(); }
 
@@ -461,9 +476,9 @@
         warning: race.state === 'racing' && staleTrainer && !state.paused ? '⚠ NO POWER SIGNAL' : '',
         chips: [
           trainer.link ? { label: trainer.connected && !staleTrainer ? 'Trainer' : 'Trainer ✗', state: trainer.connected && !staleTrainer ? 'ok' : 'bad' } : { label: 'Keyboard power', state: 'off' },
-          ride.connected ? { label: ride.map ? 'Controls' : 'Controls (uncalibrated)', state: ride.map ? 'ok' : 'off' } : { label: 'Keyboard steer', state: 'off' },
+          race.autoSteer ? { label: 'Auto-steer', state: 'ok' } : ride.connected ? { label: ride.map ? 'Controls' : 'Controls (uncalibrated)', state: ride.map ? 'ok' : 'off' } : { label: 'Keyboard steer', state: 'off' },
         ],
-        useHint: ride.connected ? (ride.bound === null ? 'Press a controller button' : 'Press your item button') : 'Space = use item',
+        useHint: race.autoSteer && race.autoItems ? 'Used automatically' : ride.connected ? (ride.bound === null ? 'Press a controller button' : 'Press your item button') : 'Space = use item',
       });
     }
     requestAnimationFrame(frame);
