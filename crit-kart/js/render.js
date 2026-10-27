@@ -364,7 +364,7 @@
           else if (sp.kind === 'obstacle') drawObstacle(ctx, sp.o, sx, sy, pu, hw);
           else if (sp.kind === 'rider') {
             const r = sp.r; r.yaw = clamp(track.curveAt(r.s) / 6, -1, 1) * 0.8 + r.lean * 0.25; const hopY = r.hop > 0 ? Math.sin(Math.PI * (1 - r.hop / 0.35)) * pu * 40 : 0;
-            const dz = seg.p1.camera.z + sp.pct * SEG_LEN, fade = r.isPlayer ? 1 : clamp((dz - 390) / 90, 0, 1); // short fade as a rival slips behind the camera; riders level with you stay solid
+            const dz = seg.p1.camera.z + sp.pct * SEG_LEN, fade = r.isPlayer ? 1 : clamp((dz - 390) / 90, 0, 1) * r.ghost; // short fade as a rival slips behind the camera; riders level with you stay solid
             if (fade > 0.02) { ctx.globalAlpha = fade; drawRider(ctx, sx, sy - hopY, pu * RW, r, this.t); ctx.globalAlpha = 1; this.stats.riders++; }
             if (pu * RW > 28 && (r.isPlayer || tagged.has(r))) {
               const sz = clamp(pu * RW * 0.2, 10, 20);

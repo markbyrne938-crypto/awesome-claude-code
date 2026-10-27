@@ -57,6 +57,7 @@ The Zwift Ride protocol is not public and I could not check it against a device.
   | A · Hard | 1.10 x FTP | clearly above FTP |
 
   (Each rival varies +-4 % and attacks now and then, so the figures are averages; they're pinned by `test/sim.test.js`.) The menu shows your own Zwift-style category from W/kg (A 4.0+, B 3.2+, C 2.5+, D below) and previews the rivals' watts. Results list every rider's average power. You start at the back of the grid with the bunch ahead in view, and a Zwift-style leaderboard lists all eight with live gaps (the camera is behind you, so riders behind aren't on screen).
+* **No collisions**: as in Zwift, riders pass straight through each other (no shoving at the start or in the pack). Overlapping rivals turn slightly see-through so a crowded grid or a pass stays readable.
 * **Courses**: Sunny Meadows Crit (~520 m), Candy Canyon (steep and narrow, ~580 m, 3/4 of the laps), Neon Harbor Night Crit (the technical one, ~500 m). The menu estimates your race time from your FTP.
 * **Championship**: all three courses in a row, 10-8-6-5-4-3-2-1 points, final standings and a champion title.
 * **Results**: average / normalized power, W/kg, best lap, and a per-second power chart coloured by zone against your FTP.

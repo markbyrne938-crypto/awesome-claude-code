@@ -38,7 +38,7 @@
       this.s = 0; this.x = 0; this.v = 0; this.power = 0; this.pw = 0; this.steer = 0; this.lean = 0;
       this.item = null; this.stun = 0; this.boost = 0; this.shield = 0; this.invuln = 0; this.draft = 0;
       this.finished = false; this.finishTime = null; this.lap = 1; this.phase = Math.random() * 6; this.grade = 0;
-      this.pSum = 0; this.pT = 0; this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
+      this.ghost = 1; this.pSum = 0; this.pT = 0; this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
       this.ai = null;
     }
   }
@@ -139,11 +139,11 @@
       } else r.x = clamp(r.x, -1.3, 1.3);
       r.lean += (clamp(r.steer, -1, 1) - r.lean) * Math.min(1, dt * 6);
 
-      // light bumping so riders don't overlap exactly
-      for (const o of this.riders) {
-        if (o === r) continue;
-        if (Math.abs(o.s - r.s) < 1.1 && Math.abs(o.x - r.x) < 0.1) r.x += (r.x >= o.x ? 1 : -1) * 0.6 * dt;
-      }
+      // No rider-to-rider collisions (as in Zwift): riders pass straight through each other.
+      // Overlapping rivals turn slightly see-through so a crowded start or a pass stays readable.
+      let overlap = false;
+      if (!r.isPlayer) for (const o of this.riders) if (o !== r && Math.abs(o.s - r.s) < 1.6 && Math.abs(o.x - r.x) < 0.2) { overlap = true; break; }
+      r.ghost += ((overlap ? 0.62 : 1) - r.ghost) * Math.min(1, dt * 8);
 
       r.lap = clamp(Math.floor(Math.max(0, r.s) / this.length) + 1, 1, this.laps);
       if (!r.finished && r.s >= this.total) {

@@ -67,3 +67,18 @@ for (const ftp of [150, 250, 330]) for (const [cat, info] of Object.entries(C.RI
 }
 assert.deepStrictEqual(['D', 'C', 'B', 'A'].map((c) => C.riderCategory({ D: 2.0, C: 2.8, B: 3.5, A: 4.4 }[c])), ['D', 'C', 'B', 'A']);
 console.log('category checks ok');
+
+// Riders pass through each other: no lateral shove when stacked, and overlapping rivals turn see-through
+{
+  const race = new C.Race({ track: C.buildTrack(C.COURSES[0]), laps: 2, mass: 84, pace: 200, difficulty: 1 });
+  race.state = 'racing'; race.time = 0;
+  const [a, b] = race.riders.filter((r) => !r.isPlayer);
+  for (const r of race.riders) { r.s = 300; r.x = 0; r.v = 8; }
+  for (const r of [a, b]) r.s = 100 + (r === b ? 0.3 : 0);
+  a.x = 0.05; b.x = 0.05; a.ai.lane = b.ai.lane = 0.05;
+  const x0 = [a.x, b.x];
+  for (let i = 0; i < 10; i++) race.update(1 / 30, { power: 200, steer: 0, use: false });
+  assert.ok(Math.abs(a.x - x0[0]) < 0.05 && Math.abs(b.x - x0[1]) < 0.05, 'stacked riders are not pushed apart');
+  assert.ok(a.ghost < 0.95 && b.ghost < 0.95, 'overlapping rivals turn translucent');
+  console.log('pass-through checks ok (ghost alpha', a.ghost.toFixed(2) + ')');
+}
