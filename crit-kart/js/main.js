@@ -18,8 +18,9 @@
   const state = {
     mode: 'menu', paused: false, pauseMsg: '', race: null, toasts: [], incoming: 0, resultsShown: false, finishedAt: 0, champ: null,
     powerSum: 0, powerT: 0, maxPower: 0, powerLog: [], sampleSum: 0, sampleN: 0, sampleT: 0, lapTimes: [], lastTick: null,
-    place: 0, placeCand: 0, placeTimer: 0, wake: null,
+    place: 0, placeCand: 0, placeTimer: 0, wake: null, photos: [], snaps: [], snapped: {}, activity: null, card: null,
   };
+  const recorder = new C.Recorder();
   const trainer = { link: null, connected: false, power: 0, cadence: 0, lastSeen: 0, reconnecting: false };
   const hr = { link: null, connected: false, bpm: 0, lastSeen: 0 };
   const cad = { link: null, connected: false, rpm: 0, lastSeen: 0, calc: new C.CadenceCalc() };
@@ -240,6 +241,28 @@
   function releaseWake() { try { state.wake && state.wake.release(); } catch (e) { /* ignore */ } state.wake = null; }
   $('btnFull').addEventListener('click', toggleFullscreen);
 
+  // ---------- race photos ----------
+  function snap(label, delayMs = 0) {
+    if (state.snapped[label] || state.photos.length + state.snaps.length >= 7) return;
+    state.snapped[label] = true; state.snaps.push({ at: performance.now() + delayMs, label, t: state.race ? state.race.time : 0 });
+  }
+  function flushSnaps(now) { // called right after a frame has been drawn, so the canvas holds that frame
+    if (!state.snaps.length) return;
+    const due = state.snaps.filter((q) => q.at <= now); state.snaps = state.snaps.filter((q) => q.at > now);
+    for (const q of due) $('game').toBlob((b) => { if (b) state.photos.push({ label: q.label, t: q.t, blob: b, url: URL.createObjectURL(b) }); }, 'image/jpeg', 0.88);
+  }
+  const download = (blob, name) => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); };
+  const stamp = () => { const d = new Date(); const z = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}${z(d.getMonth() + 1)}${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}`; };
+  const slug = () => (state.race ? state.race.track.def.id : 'ride');
+  $('btnFit').addEventListener('click', () => { if (state.activity) download(new Blob([C.fit.encode(state.activity)], { type: 'application/octet-stream' }), `CritKart-${slug()}-${stamp()}.fit`); });
+  $('btnPhotos').addEventListener('click', async () => {
+    const files = [], enc = new TextEncoder(), photos = state.photos.slice().sort((a, b) => a.t - b.t);
+    if (state.card) files.push({ name: '00-results-card.jpg', data: new Uint8Array(await state.card.arrayBuffer()) });
+    let i = 1; for (const ph of photos) files.push({ name: `${String(i++).padStart(2, '0')}-${ph.label}.jpg`, data: new Uint8Array(await ph.blob.arrayBuffer()) });
+    files.push({ name: 'README.txt', data: enc.encode('Crit Kart race photos\n\n1. Upload the .fit file at https://www.strava.com/upload/select (it appears as a Virtual Ride).\n2. Open the new activity on Strava, choose Edit, then add these photos.\n\nThe results card is a ready-made picture of your race stats.\n') });
+    download(new Blob([C.zip(files)], { type: 'application/zip' }), `CritKart-photos-${slug()}-${stamp()}.zip`);
+  });
+
   function setAutoSteer(on) {
     cfg.steer = on ? 'auto' : 'manual'; store.set('steer', cfg.steer);
     if (state.race) state.race.autoSteer = on;
@@ -365,6 +388,7 @@
     state.race = makeRace(); state.mode = 'race'; state.paused = false; state.pauseMsg = ''; state.toasts = []; state.resultsShown = false;
     state.powerSum = state.powerT = state.maxPower = 0; state.powerLog = []; state.sampleSum = state.sampleN = state.sampleT = 0; state.lapTimes = []; state.lastTick = null;
     state.place = state.placeCand = 0; state.placeTimer = 0;
+    recorder.reset(); for (const ph of state.photos) URL.revokeObjectURL(ph.url); state.photos = []; state.snaps = []; state.snapped = {}; state.activity = null; state.card = null;
     kb.power = (cfg.ftp || 200) * 0.9; ride.use = false;
     $('menu').hidden = true; $('results').hidden = true; $('pause').hidden = true;
     const def = C.COURSES.find((c) => c.id === currentCourseId());
@@ -392,18 +416,20 @@
         toast({ bump: 'Speed bump!', cone: 'Cone! Weave!', pothole: 'Pothole!', barrel: 'Barrel crash!' }[e.kind], '#ffd9a0', 1.4);
         play(e.kind === 'bump' ? 'bump' : 'clunk');
       } else if (e.type === 'vehicle' && mine) {
+        snap('ouch', 250);
         toast(e.kind === 'door' ? 'DOORED!' : e.vehicle.mode === 'cross' ? 'T-boned by a crossing car!' : e.vehicle.type === 'suv' ? 'Clipped by an SUV!' : 'Clipped by a car!', '#ff9a9a', 2); play('hit'); play('horn');
       } else if (e.type === 'vehicle' && !mine && e.vehicle.mode === 'cross') toast(`${e.rider.name} hit a crossing car!`, '#ffd7e8', 1.6);
       else if (e.type === 'horn') { const d = (((e.vehicle.s - race.player.s) % race.length) + race.length * 1.5) % race.length - race.length / 2; if (d > -20 && d < 110) play('horn'); }
       else if (e.type === 'bell') { toast('BELL LAP!', '#ffe066', 2.6); play('bell');
-      } else if (e.type === 'sprint') { toast('SPRINT! 300 m to go', '#ff8787', 2.6); play('sprintCall');
+      } else if (e.type === 'sprint') { toast('SPRINT! 300 m to go', '#ff8787', 2.6); play('sprintCall'); snap('sprint', 1200);
       } else if (e.type === 'incoming') { state.incoming = 3; play('incoming'); }
       else if (e.type === 'notarget') toast('No target ahead', '#ccc');
       else if (e.type === 'lap') {
         state.lapTimes.push(e.lapTime);
         const best = Math.min(...state.lapTimes), isBest = e.lapTime <= best && state.lapTimes.length > 1;
+        if (!e.final) recorder.lap();
         if (!e.final) { toast(`Lap ${e.lap}/${race.laps}  ${C.fmtTime(e.lapTime)}${isBest ? '  ★ best' : ''}`, isBest ? '#ffe14d' : '#fff'); play(isBest ? 'bestLap' : 'lap'); }
-      } else if (e.type === 'finish' && mine) { toast(`FINISHED — P${e.place}!`, '#7dff9b', 3); play('finish'); state.finishedAt = performance.now(); }
+      } else if (e.type === 'finish' && mine) { toast(`FINISHED — P${e.place}!`, '#7dff9b', 3); play('finish'); state.finishedAt = performance.now(); snap('finish', 450); }
     }
     race.events.length = 0;
   }
@@ -415,6 +441,7 @@
     if (place !== state.placeCand) { state.placeCand = place; state.placeTimer = 0; return; }
     state.placeTimer += dt;
     if (state.placeTimer > 1.2 && place !== state.place) {
+      if (!race.player.finished && place < state.place && race.time > 15) snap('overtake');
       if (!race.player.finished) { toast(place < state.place ? `▲ Up to P${place}` : `▼ Down to P${place}`, place < state.place ? '#8cffb0' : '#ffb3b3', 1.6); play(place < state.place ? 'up' : 'down'); }
       state.place = place;
     }
@@ -444,6 +471,22 @@
     c.pending = null;
   }
 
+  // Build the ride file + share card, and show the race photos, once the player has finished.
+  function setupSave(race, res, st) {
+    const ok = recorder.samples.length >= 10;
+    $('btnFit').disabled = !ok; $('btnPhotos').disabled = true; state.activity = null; state.card = null; $('photoStrip').innerHTML = '';
+    if (!ok) { $('saveHint').textContent = 'Ride at least 10 seconds to save a ride file.'; return; }
+    state.activity = C.buildActivity({ startMs: recorder.startMs, samples: recorder.samples, lapEnds: recorder.lapEnds, track: race.track, ftp: cfg.ftp, includeMap: cfg.fitMap });
+    $('saveHint').textContent = "Upload the .fit on Strava: it arrives as a Virtual Ride with power, cadence, heart rate, laps and a map. Strava doesn't let apps attach pictures, so add the photos from the zip to the activity yourself.";
+    const me = res.find((r) => r.isPlayer), nowD = new Date();
+    C.share.makeCard({ course: race.track.def.name, theme: race.track.def.theme, date: nowD.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }), place: me.place, field: res.length, time: me.time != null ? C.fmtTime(me.time) : '–',
+      avg: st.avg, np: st.np ? Math.round(st.np) : 0, wkg: (st.avg / cfg.weight).toFixed(2), best: st.best, hrAvg: st.hrAvg, hrMax: st.hrMax, cat: cfg.cat, ftp: cfg.ftp, power: state.powerLog, map: race.track.map }).then((b) => { state.card = b; $('btnPhotos').disabled = false; });
+    setTimeout(() => { // photos are encoded asynchronously; list them once they exist
+      $('photoStrip').innerHTML = state.photos.slice().sort((a, b) => a.t - b.t).map((ph) => `<img src="${ph.url}" alt="${ph.label}" title="${ph.label}">`).join('');
+      $('btnPhotos').disabled = !state.card && !state.photos.length;
+    }, 700);
+  }
+
   function showResults(race) {
     state.resultsShown = true; state.paused = false; $('pause').hidden = true;
     const res = race.results(), champ = state.champ;
@@ -452,7 +495,8 @@
     const avg = state.powerT ? Math.round(state.powerSum / state.powerT) : 0, np = normalizedPower(state.powerLog);
     const best = state.lapTimes.length ? C.fmtTime(Math.min(...state.lapTimes)) : '–';
     const stat = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
-    $('resultsStats').innerHTML = stat(avg + ' W', 'avg power') + stat(np ? Math.round(np) + ' W' : '–', 'normalized') + stat((avg / cfg.weight).toFixed(2), 'W/kg') + stat(Math.round(state.maxPower) + ' W', 'max') + stat(best, 'best lap');
+    const hrs = recorder.samples.map((x) => x.hr).filter((x) => x > 0), hrAvg = hrs.length ? Math.round(hrs.reduce((a, b) => a + b, 0) / hrs.length) : 0, hrMax = hrs.length ? Math.round(Math.max(...hrs)) : 0;
+    $('resultsStats').innerHTML = (hrs.length ? stat(hrAvg + ' bpm', 'avg heart rate') + stat(hrMax + ' bpm', 'max heart rate') : '') + stat(avg + ' W', 'avg power') + stat(np ? Math.round(np) + ' W' : '–', 'normalized') + stat((avg / cfg.weight).toFixed(2), 'W/kg') + stat(Math.round(state.maxPower) + ' W', 'max') + stat(best, 'best lap');
     const player = res.find((r) => r.isPlayer);
     $('resultsTitle').textContent = player.place === 1 ? '🏆 YOU WON!' : player.place <= 3 ? 'PODIUM!' : 'RESULTS';
     // championship panel
@@ -469,12 +513,19 @@
       $('champBody').innerHTML = rows.map((r, i) => `<tr class="${r.isPlayer ? 'me' : ''}"><td>${i + 1}</td><td><i style="background:${r.color}"></i>${r.name}</td><td class="pts">${totals[r.name]} pts</td></tr>`).join('');
       if (last) { commitRound(); const w = rows[0]; $('resultsTitle').textContent = w.isPlayer ? '🏆 CHAMPION!' : `${w.name} wins the title`; }
     }
-    $('results').hidden = false; drawPowerChart();
+    $('results').hidden = false; drawPowerChart(); setupSave(race, res, { avg, np, best, hrAvg, hrMax });
     if (trainer.link) trainer.link.setGrade(0);
     releaseWake();
   }
 
   let last = performance.now();
+  // rear-view mirror: a second small renderer looking backward along the reversed track
+  let mirrorCv = null, mirrorR = null;
+  function renderMirror(race, dt) {
+    if (!mirrorR) { mirrorCv = document.createElement('canvas'); mirrorR = new C.Renderer(mirrorCv, { fixed: [360, 128], mirror: true, camH: 105, camBack: 60, depth: 0.95, drawMax: 44, pitch: false, speedFov: false, rw: 135 }); }
+    mirrorR.render(C.buildMirrorView(race), dt, { menu: true });
+    return mirrorCv;
+  }
   const debug = { manual: false }; // manual: a test harness drives tick() itself at a fixed step (used for smooth, deterministic captures)
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
@@ -505,6 +556,8 @@
         state.sampleSum += power * dt; state.sampleT += dt;
         if (state.sampleT >= 1) { state.powerLog.push(state.sampleSum / state.sampleT); state.sampleSum = state.sampleT = 0; }
         trackPlace(race, dt);
+        recorder.tick(dt, race.player, { power, cadence: cadenceNow(now), hr: hrNow(now) });
+        if (race.time > 1.6) snap('start');
       }
       if (trainer.link && race.state !== 'countdown') trainer.link.setGrade(race.player.grade * 100 * cfg.gradeFeel);
       for (const t of state.toasts) t.life -= dt;
@@ -518,21 +571,24 @@
 
     if (race) {
       const p = race.player;
+      const mirror = cfg.mirror && state.mode === 'race' ? renderMirror(race, state.paused ? 0 : dt) : null;
       renderer.render(race, state.paused ? 0 : dt, {
+        mirror,
         power: p.pw, cadence: cadenceNow(now) || (trainer.link ? 0 : (p.v > 0.5 ? Math.round(p.rpm) : 0)), hr: hrNow(now), maxHr: cfg.maxHr || 190, ftp: cfg.ftp, weight: cfg.weight,
         toasts: state.toasts, incoming: state.incoming > 0, menu: state.mode === 'menu',
         warning: race.state === 'racing' && staleTrainer && !state.paused ? '⚠ NO POWER SIGNAL' : '',
         chips: [
           trainer.link ? { label: trainer.connected && !staleTrainer ? 'Trainer' : 'Trainer ✗', state: trainer.connected && !staleTrainer ? 'ok' : 'bad' } : { label: 'Keyboard power', state: 'off' },
           race.autoSteer ? { label: 'Auto-steer', state: 'ok' } : ride.connected ? { label: ride.map ? 'Controls' : 'Controls (uncalibrated)', state: ride.map ? 'ok' : 'off' } : { label: 'Keyboard steer', state: 'off' },
-        ],
+        ].concat(hrNow(now) ? [{ label: 'HR', state: 'ok' }] : []),
         useHint: race.autoSteer && race.autoItems ? 'Used automatically' : ride.connected ? (ride.bound === null ? 'Press a controller button' : 'Press your item button') : 'Space = use item',
       });
     }
+    flushSnaps(now);
   }
 
   refreshLabels(); makeDemo();
   if (cfg.ftp == null) $('ftp').focus(); // the one thing we need from a new player
-  window.CritDebug = { debug, tick, kb, renderer, state, cfg, trainer, ride, startRace, toMenu, showResults, onRideMessage, rideSteer };
+  window.CritDebug = { hr, cad, debug, tick, kb, renderer, state, cfg, trainer, ride, startRace, toMenu, showResults, onRideMessage, rideSteer };
   requestAnimationFrame(frame);
 })();

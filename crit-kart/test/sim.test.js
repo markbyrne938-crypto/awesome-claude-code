@@ -1,6 +1,6 @@
 // Run with: node test/sim.test.js
 const assert = require('assert');
-require('../js/ble.js'); require('../js/course.js'); require('../js/sim.js');
+require('../js/ble.js'); require('../js/course.js'); require('../js/sim.js'); require('../js/export.js');
 const C = globalThis.Crit;
 
 // FTMS Indoor Bike Data: flags 0x0044 = speed present (bit0=0), cadence (bit2), power (bit6)
@@ -194,4 +194,64 @@ console.log('category checks ok');
   for (let i = 0; i < 90 && !hit; i++) { r2.update(1 / 30, { power: 250, steer: 0, use: false }); for (const e of r2.events) if (e.type === 'vehicle' && e.rider === p) hit = true; r2.events.length = 0; }
   assert.ok(hit && (p.stun > 0 || p.pend > 0 || p.v < 9), 'riding into a parked SUV hurts');
   console.log(`city traffic checks ok (player hit ${kinds.player}x, rivals ${kinds.rivals}x, ${crossings} crossings, ${doors} doors opened, <= ${maxVeh} vehicles)`);
+}
+
+// Rear-view mirror geometry: the reversed track is the same road driven the other way
+{
+  for (const def of C.COURSES) {
+    const t = C.buildTrack(def), rev = C.reverseTrack(t), L = t.length;
+    assert.strictEqual(rev.segs.length, t.N);
+    for (const sx of [3, 77.7, L * 0.5, L - 5]) {
+      assert.ok(Math.abs(rev.elevationAt(sx) - t.elevationAt(L - sx)) < 1e-9, 'mirror elevation maps s -> L - s');
+      assert.ok(Math.abs(rev.curveAt(sx) + t.curveAt(L - sx)) < 1e-9, 'bends flip sign');
+      assert.ok(Math.abs(rev.gradeAt(sx) + t.gradeAt(L - sx)) < 1e-9, 'slopes flip sign');
+    }
+    assert.ok(Math.abs(rev.segs[0].y1 - t.segs[t.N - 1].y2) < 1e-9 && Math.abs(rev.segs[0].y2 - t.segs[t.N - 1].y1) < 1e-9, 'reversed segments run the other way');
+    assert.strictEqual(C.reverseTrack(t), rev, 'cached');
+    if (t.obstacles.length) { const o = t.obstacles[0], ro = rev.obstacles[0]; assert.ok(Math.abs(ro.s - (L - o.s)) < 1e-9 && ro.x === -o.x); o.down = true; assert.strictEqual(ro.down, true, 'obstacle state is live'); o.down = false; }
+  }
+  console.log('mirror track checks ok');
+}
+
+// ---- .fit export: decode the file back with an independent reader and check structure, CRCs and values ----
+const { decodeFit } = require('./fitdecode.js');
+{
+  const track = C.buildTrack(C.COURSES[0]), samples = []; let d = 0, hr = 120;
+  for (let i = 0; i < 720; i++) { const v = 9 + Math.sin(i / 30); d += v; hr = Math.min(185, hr + 0.08); samples.push({ t: i, power: 230 + 30 * Math.sin(i / 20), cadence: 88 + (i % 5), hr, speed: v, dist: d, s: d }); }
+  const startMs = Date.UTC(2026, 9, 27, 10, 0, 0);
+  const act = C.buildActivity({ startMs, samples, lapEnds: [64, 130, 200], track, ftp: 240, includeMap: true });
+  const msgs = decodeFit(C.fit.encode(act)), by = (num) => msgs.filter((m) => m.num === num);
+  assert.strictEqual(by(0).length, 1); assert.strictEqual(by(0)[0].v[0], 4, 'file type = activity');
+  assert.strictEqual(by(20).length, 720, 'one record per second');
+  assert.strictEqual(by(19).length, act.laps.length); assert.strictEqual(by(18).length, 1); assert.strictEqual(by(34).length, 1); assert.strictEqual(by(21).length, 2, 'timer start + stop');
+  const sess = by(18)[0].v, rec = by(20);
+  assert.strictEqual(sess[5], 2, 'sport = cycling'); assert.strictEqual(sess[6], 58, 'sub sport = virtual activity'); assert.strictEqual(sess[26], act.laps.length, 'lap count');
+  assert.strictEqual(sess[8], 720000, 'timer time (ms)'); assert.strictEqual(sess[45], 240, 'threshold power = FTP'); assert.ok(Math.abs(sess[20] - 230) <= 2, `avg power ${sess[20]}`);
+  assert.ok(sess[34] >= 230 && sess[34] <= 245, `normalized power ${sess[34]}`); assert.ok(sess[35] > 0, 'TSS present');
+  assert.strictEqual(rec[10].v[253] - rec[0].v[253], 10, 'timestamps advance 1 s per record');
+  assert.strictEqual(rec[0].v[253], Math.round(startMs / 1000 - Date.UTC(1989, 11, 31) / 1000), 'FIT epoch timestamps');
+  assert.strictEqual(rec[100].v[7], Math.round(samples[100].power), 'record power'); assert.strictEqual(rec[100].v[4], Math.round(samples[100].cadence)); assert.strictEqual(rec[100].v[3], Math.round(samples[100].hr));
+  assert.ok(Math.abs(rec[100].v[5] / 100 - samples[100].dist) < 0.01, 'distance (cm)'); assert.ok(Math.abs(rec[100].v[6] / 1000 - samples[100].speed) < 0.002, 'speed (mm/s)');
+  const alt = rec[100].v[2] / 5 - 500; assert.ok(alt > 10 && alt < 40, `altitude ${alt}`);
+  const lat = rec.map((m) => m.v[0] * 180 / 2147483648), lon = rec.map((m) => m.v[1] * 180 / 2147483648);
+  assert.ok(lat.every((x) => x < -30 && x > -45) && lon.every((x) => x < -130 && x > -150), 'virtual positions sit in open ocean, not a real place');
+  const span = (Math.max(...lat) - Math.min(...lat)) * 111320; assert.ok(span > 50 && span < 400, `loop is about the size of the course (${span.toFixed(0)} m)`);
+  // without the map: no position fields are set (invalid sentinel)
+  const act2 = C.buildActivity({ startMs, samples, lapEnds: [], track, ftp: 240, includeMap: false }), m2 = decodeFit(C.fit.encode(act2)).filter((m) => m.num === 20);
+  assert.strictEqual(m2[0].v[0], 0x7fffffff, 'position left invalid when the map is off'); assert.strictEqual(decodeFit(C.fit.encode(act2)).filter((m) => m.num === 19).length, 1, 'a single lap when no boundaries');
+  // heart rate left out when no monitor: invalid sentinel
+  const act3 = C.buildActivity({ startMs, samples: samples.map((s) => Object.assign({}, s, { hr: 0 })), lapEnds: [], track, ftp: 240, includeMap: false });
+  assert.strictEqual(decodeFit(C.fit.encode(act3)).filter((m) => m.num === 20)[5].v[3], 0xff, 'no heart rate = invalid, not 0');
+  console.log(`fit export checks ok (${C.fit.encode(act).length} bytes, ${act.laps.length} laps, NP ${sess[34]} W, TSS ${(sess[35] / 10).toFixed(1)})`);
+}
+// ZIP writer: read back with a reader that checks the CRCs
+{
+  const files = [{ name: 'a.txt', data: Uint8Array.from(Buffer.from('hello')) }, { name: 'dir/b.bin', data: Uint8Array.from([1, 2, 3, 250, 251]) }];
+  const z = C.zip(files), dv = new DataView(z.buffer, z.byteOffset, z.byteLength);
+  const eocd = z.length - 22; assert.strictEqual(dv.getUint32(eocd, true), 0x06054b50); assert.strictEqual(dv.getUint16(eocd + 10, true), 2);
+  let p = dv.getUint32(eocd + 16, true); const got = [];
+  for (let i = 0; i < 2; i++) { assert.strictEqual(dv.getUint32(p, true), 0x02014b50); const crc = dv.getUint32(p + 16, true), size = dv.getUint32(p + 20, true), nl = dv.getUint16(p + 28, true), off = dv.getUint32(p + 42, true), name = Buffer.from(z.slice(p + 46, p + 46 + nl)).toString();
+    assert.strictEqual(dv.getUint32(off, true), 0x04034b50); const ln = dv.getUint16(off + 26, true), data = z.slice(off + 30 + ln, off + 30 + ln + size); assert.strictEqual(C.crc32(data), crc, 'stored CRC32 matches'); got.push([name, Buffer.from(data).toString('hex')]); p += 46 + nl; }
+  assert.deepStrictEqual(got.map((g) => g[0]), ['a.txt', 'dir/b.bin']); assert.strictEqual(C.crc32(Uint8Array.from(Buffer.from('123456789'))), 0xcbf43926, 'CRC32 check value');
+  console.log('zip checks ok');
 }

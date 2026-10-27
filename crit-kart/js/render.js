@@ -72,7 +72,7 @@
     ctx.strokeStyle = color; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   }
 
-  function drawRider(ctx, x, y, w, r, time) {
+  function drawRider(ctx, x, y, w, r, time, front = false) {
     const u = w, edge = 'rgba(12,12,28,.6)', ew = Math.max(0.6, u * 0.008);
     const h = hashStr(r.name), skin = SKIN[h % 4], kit = r.color, kitDark = shade(kit, -0.4), kitLight = shade(kit, 0.4), shorts = '#1b1e2a';
     ctx.save(); ctx.translate(x, y);
@@ -116,6 +116,11 @@
     ctx.fillStyle = shorts; ctx.strokeStyle = edge; ctx.lineWidth = ew;
     ctx.beginPath(); ctx.moveTo(-u * 0.115 + sway, -u * 0.72); ctx.lineTo(u * 0.115 + sway, -u * 0.72); ctx.quadraticCurveTo(u * 0.135 + sway, -u * 0.66, u * 0.09 + sway, -u * 0.62); ctx.lineTo(-u * 0.09 + sway, -u * 0.62); ctx.quadraticCurveTo(-u * 0.135 + sway, -u * 0.66, -u * 0.115 + sway, -u * 0.72); ctx.closePath(); ctx.fill(); ctx.stroke();
 
+    if (front) { // front wheel and fork, seen head-on (riders in the mirror are coming toward us)
+      ctx.fillStyle = '#15151d'; ellipse(ctx, 0, -u * 0.31, u * 0.052, u * 0.31); ctx.fill(); ctx.strokeStyle = edge; ctx.lineWidth = ew; ctx.stroke();
+      ctx.strokeStyle = '#b9c0cc'; ctx.lineWidth = u * 0.011; ellipse(ctx, 0, -u * 0.31, u * 0.03, u * 0.285); ctx.stroke();
+      ctx.strokeStyle = '#23262f'; ctx.lineWidth = u * 0.02; ctx.beginPath(); ctx.moveTo(0, -u * 0.33); ctx.lineTo(0, -u * 0.74); ctx.stroke();
+    }
     // torso: tapered jersey, lit from the left
     ctx.save(); ctx.translate(sway * 1.5, 0);
     ctx.beginPath(); ctx.moveTo(-u * 0.118, -u * 0.69);
@@ -131,8 +136,9 @@
     else { ctx.beginPath(); ctx.moveTo(-u * 0.25, -u * 0.98); ctx.lineTo(-u * 0.25, -u * 0.92); ctx.lineTo(u * 0.25, -u * 0.74); ctx.lineTo(u * 0.25, -u * 0.8); ctx.closePath(); ctx.fill(); }
     ctx.fillStyle = 'rgba(0,0,0,.12)'; ctx.fillRect(-u * 0.01, -u * 1.05, u * 0.02, u * 0.38); // spine seam
     ctx.restore();
+    if (front) { ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.lineWidth = u * 0.012; ctx.beginPath(); ctx.moveTo(0, -u * 1.0); ctx.lineTo(0, -u * 0.72); ctx.stroke(); }
     ctx.fillStyle = 'rgba(0,0,0,.28)';
-    for (const px of [-0.078, 0, 0.078]) { rrect(ctx, u * (px - 0.03), -u * 0.765, u * 0.06, u * 0.04, u * 0.012); ctx.fill(); }
+    if (!front) for (const px of [-0.078, 0, 0.078]) { rrect(ctx, u * (px - 0.03), -u * 0.765, u * 0.06, u * 0.04, u * 0.012); ctx.fill(); }
     ctx.restore();
 
     // arms to the drops: sleeve, bare forearm, glove
@@ -148,6 +154,13 @@
     limb(ctx, 0, -u * 1.03, 0, -u * 1.08, u * 0.065, skin, edge, ew);
     ctx.fillStyle = skin; ctx.strokeStyle = edge; ctx.lineWidth = ew; ellipse(ctx, -u * 0.088, -u * 1.115, u * 0.016, u * 0.024); ctx.fill(); ellipse(ctx, u * 0.088, -u * 1.115, u * 0.016, u * 0.024); ctx.fill();
     const hg = ctx.createLinearGradient(-u * 0.1, 0, u * 0.1, 0); hg.addColorStop(0, '#ffffff'); hg.addColorStop(1, '#c9ced9');
+    if (front) { // face, sunglasses, helmet over the forehead
+      ctx.fillStyle = skin; ctx.strokeStyle = edge; ctx.lineWidth = ew; ellipse(ctx, 0, -u * 1.07, u * 0.085, u * 0.1); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = hg; ctx.beginPath(); ctx.ellipse(0, -u * 1.12, u * 0.105, u * 0.085, 0, Math.PI, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = kit; ctx.fillRect(-u * 0.012, -u * 1.2, u * 0.024, u * 0.07);
+      ctx.fillStyle = '#15151d'; rrect(ctx, -u * 0.08, -u * 1.115, u * 0.16, u * 0.034, u * 0.012); ctx.fill();
+      ctx.strokeStyle = 'rgba(20,20,35,.5)'; ctx.lineWidth = u * 0.008; ctx.beginPath(); ctx.moveTo(-u * 0.03, -u * 1.02); ctx.lineTo(u * 0.03, -u * 1.02); ctx.stroke();
+    } else {
     ctx.fillStyle = hg;
     ctx.beginPath(); ctx.moveTo(-u * 0.092, -u * 1.13); ctx.bezierCurveTo(-u * 0.095, -u * 1.22, u * 0.095, -u * 1.22, u * 0.092, -u * 1.13);
     ctx.quadraticCurveTo(u * 0.085, -u * 1.03, 0, -u * 0.985); ctx.quadraticCurveTo(-u * 0.085, -u * 1.03, -u * 0.092, -u * 1.13); ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -155,6 +168,7 @@
     ctx.fillStyle = 'rgba(30,30,50,.55)';
     for (const sd of [-1, 1]) for (let i = 0; i < 3; i++) { ellipse(ctx, sd * u * 0.045, -u * (1.17 - i * 0.04), u * 0.012, u * 0.014); ctx.fill(); }
     ctx.strokeStyle = 'rgba(20,20,35,.6)'; ctx.lineWidth = u * 0.006; ctx.beginPath(); ctx.moveTo(-u * 0.09, -u * 1.11); ctx.lineTo(-u * 0.06, -u * 1.14); ctx.moveTo(u * 0.09, -u * 1.11); ctx.lineTo(u * 0.06, -u * 1.14); ctx.stroke(); // glasses arms
+    }
 
     // status effects
     if (r.shield > 0) {
@@ -171,7 +185,7 @@
     ctx.restore();
   }
 
-  function drawScenery(ctx, sp, x, y, pu) {
+  function drawScenery(ctx, sp, x, y, pu, mirror) {
     pu *= 0.7; // scenery drawn for a wider road; keep it in proportion to the ~9 m road
     const s = sp.scale; ctx.save(); ctx.translate(x, y); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     const lw = Math.max(1, pu * 14); ctx.lineWidth = lw; ctx.strokeStyle = INK;
@@ -186,7 +200,7 @@
     } else if (sp.type === 'sign') {
       ctx.fillStyle = '#6b4a1e'; ctx.fillRect(-pu * 15 * s, -pu * 260 * s, pu * 30 * s, pu * 260 * s); ctx.strokeRect(-pu * 15 * s, -pu * 260 * s, pu * 30 * s, pu * 260 * s);
       rrect(ctx, -pu * 130 * s, -pu * 420 * s, pu * 260 * s, pu * 170 * s, pu * 30); ctx.fillStyle = hsl(60); ctx.fill(); ctx.stroke();
-      text(ctx, ['GO!', 'WATTS', 'PEDAL', 'HUP!'][sp.hue % 4], 0, -pu * 335 * s, pu * 70 * s, '#fff');
+      if (!mirror) text(ctx, ['GO!', 'WATTS', 'PEDAL', 'HUP!'][sp.hue % 4], 0, -pu * 335 * s, pu * 70 * s, '#fff'); // (flipped lettering looks wrong in the mirror)
     } else if (sp.type === 'lolly') {
       ctx.fillStyle = '#fff'; ctx.fillRect(-pu * 14 * s, -pu * 330 * s, pu * 28 * s, pu * 330 * s); ctx.strokeRect(-pu * 14 * s, -pu * 330 * s, pu * 28 * s, pu * 330 * s);
       ctx.fillStyle = hsl(62); ellipse(ctx, 0, -pu * 430 * s, pu * 130 * s, pu * 130 * s); ctx.fill(); ctx.stroke();
@@ -318,10 +332,32 @@
     ctx.restore();
   }
 
+  // The race as seen by the rear-view mirror camera: everything mapped onto the reversed track (s -> L - s, x -> -x).
+  function buildMirrorView(race) {
+    const L = race.length, f = (o, extra) => Object.create(o, Object.assign({ s: { value: L - o.s }, x: { value: -o.x } }, extra || {}));
+    return {
+      track: C.reverseTrack(race.track), length: L, state: race.state, time: race.time,
+      player: f(race.player, { lean: { value: -race.player.lean }, hop: { value: 0 } }),
+      riders: race.riders.map((r) => f(r, { lean: { value: -r.lean }, yaw: { value: 0, writable: true } })),
+      boxes: race.boxes.map((b) => f(b)), hazards: race.hazards.map((h) => f(h)),
+      projectiles: race.projectiles.map((q) => f(q)),
+      vehicles: race.vehicles.map((v) => f(v, { vx: { value: -(v.vx || 0) }, laneX: { value: -(v.laneX || 0) } })),
+      junctions: race.junctions.map((j) => ({ s: L - j.s, active: j.active })),
+    };
+  }
+
   class Renderer {
-    constructor(canvas) { this.cv = canvas; this.ctx = canvas.getContext('2d'); this.bg = 0; this.pitch = 0; this.horizon = 360; this.stats = { riders: 0 }; this.resize(); }
+    constructor(canvas, opts = {}) {
+      this.cv = canvas; this.ctx = canvas.getContext('2d'); this.bg = 0; this.pitch = 0; this.horizon = 360; this.stats = { riders: 0, sprites: {} };
+      // camera and size settings; the rear-view mirror is a second renderer with a low, wide, backward-looking camera
+      this.opts = Object.assign({ camH: CAM_H, camBack: CAM_BACK, rw: RW, depth: BASE_DEPTH, drawMax: DRAW_MAX, pitch: true, speedFov: true, mirror: false, fixed: null }, opts);
+      this.mirror = this.opts.mirror; this.resize();
+    }
 
     resize() {
+      if (this.opts.fixed) { // offscreen canvas of a fixed size (the mirror)
+        [this.W, this.H] = this.opts.fixed; this.cv.width = this.W; this.cv.height = this.H; this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ui = 1; return;
+      }
       const dpr = Math.min(2, window.devicePixelRatio || 1);
       this.W = window.innerWidth; this.H = window.innerHeight;
       this.cv.width = Math.floor(this.W * dpr); this.cv.height = Math.floor(this.H * dpr);
@@ -374,22 +410,22 @@
 
     render(race, dt, hud) {
       this.t = (this.t || 0) + dt;
-      const { ctx, W, H } = this, track = race.track, segs = track.segs, N = track.N, T = track.trackLen, p = race.player, th = track.theme;
-      const DRAW = Math.min(DRAW_MAX, N - CAM_BACK / SEG_LEN - 4 | 0); // never wrap past the camera segment
+      const { ctx, W, H } = this, track = race.track, segs = track.segs, N = track.N, T = track.trackLen, p = race.player, th = track.theme, O = this.opts;
+      const DRAW = Math.min(O.drawMax, N - O.camBack / SEG_LEN - 4 | 0); // never wrap past the camera segment
       // Camera pitch: look at the road surface ahead. Descents tilt the view down (horizon rises) so the road stays on screen
       // instead of showing mostly sky; climbs tilt up only a little.
-      const slope = (track.elevationAt(p.s + 35) - track.elevationAt(p.s + 5)) / 30 * C.VEXAG;
+      const slope = O.pitch ? (track.elevationAt(p.s + 35) - track.elevationAt(p.s + 5)) / 30 * C.VEXAG : 0;
       const targetPitch = clamp(slope < 0 ? slope * 0.95 : slope * 0.35, -0.3, 0.12) * H;
-      DEPTH = BASE_DEPTH * (1 - clamp((p.v - 6) / 16, 0, 1) * 0.2);
+      DEPTH = O.depth * (O.speedFov ? 1 - clamp((p.v - 6) / 16, 0, 1) * 0.2 : 1);
       this.pitch += (targetPitch - this.pitch) * Math.min(1, (dt || 0.016) * 2.5);
       this.horizon = H / 2 + this.pitch;
       this.drawBackground(race, dt);
 
       const mod = (z) => ((z % T) + T) % T;
-      const camZ = mod(p.s * UNIT - CAM_BACK);
+      const camZ = mod(p.s * UNIT - O.camBack);
       const baseI = Math.floor(camZ / SEG_LEN), base = segs[baseI], pct = (camZ % SEG_LEN) / SEG_LEN;
       const shake = p.hop > 0 ? Math.sin(this.t * 30) * 16 * Math.sin(Math.PI * (1 - p.hop / 0.35)) : 0; // eases in and out with the hop
-      const camY = lerp(base.y1, base.y2, pct) + CAM_H + shake;
+      const camY = lerp(base.y1, base.y2, pct) + O.camH + (O.mirror ? 0 : shake);
       const camX = p.x * ROAD_W * 0.8 * track.widthAt(p.s);
       let dx = -(base.curve * pct), x = 0, maxy = H;
 
@@ -397,8 +433,15 @@
         const seg = segs[(baseI + n) % N], looped = seg.i < baseI, z = camZ - (looped ? T : 0);
         this.project(seg.p1, camX - x, camY, z, seg.w1); this.project(seg.p2, camX - x - dx, camY, z, seg.w2);
         x += dx; dx += seg.curve; seg.clip = maxy;
-        const a = seg.p1.screen, b = seg.p2.screen;
-        if (a.scale <= 0 || a.scale > 40 || seg.p1.camera.z <= DEPTH || b.y >= a.y || b.y >= maxy) continue;
+        let a = seg.p1.screen; const b = seg.p2.screen;
+        let clipped = false;
+        if (seg.p1.camera.z <= DEPTH * 25 && seg.p2.camera.z > DEPTH * 25) {
+          // the segment under the camera: clip it at a near plane so the road in front of the wheel is still drawn (matters for the low mirror camera)
+          const c1 = seg.p1.camera, c2 = seg.p2.camera, nz = DEPTH * 25, t = (nz - c1.z) / (c2.z - c1.z), cx = lerp(c1.x, c2.x, t), cy = lerp(c1.y, c2.y, t), sc = DEPTH / nz;
+          a = { scale: sc, x: Math.round(W / 2 + (sc * cx * W) / 2), y: Math.round(this.horizon - (sc * cy * H) / 2), w: Math.round((sc * ROAD_W * lerp(seg.w1, seg.w2, t) * W) / 2) };
+          clipped = true;
+        }
+        if (a.scale <= 0 || a.scale > 40 || (!clipped && seg.p1.camera.z <= DEPTH) || b.y >= a.y || b.y >= maxy) continue;
         const gr = th.grass[seg.alt]; ctx.fillStyle = gr; ctx.fillRect(0, b.y, W, a.y - b.y);
         const r1 = a.w / 6, r2 = b.w / 6, rc = th.rumble[seg.alt];
         this.poly(a.x - a.w - r1, a.y, a.x - a.w, a.y, b.x - b.w, b.y, b.x - b.w - r2, b.y, rc);
@@ -436,7 +479,7 @@
       for (const h of race.hazards) put(h.s, { kind: 'banana', off: h.x });
       for (const pr of race.projectiles) put(pr.s, { kind: 'proj', off: pr.x, pr });
       this.stats = { riders: 0, sprites: {} };
-      for (const r of race.riders) put(r.s, { kind: 'rider', off: r.x, r });
+      for (const r of race.riders) { if (O.mirror && r.isPlayer) continue; put(r.s, { kind: 'rider', off: r.x, r }); }
 
       const tagged = new Set(race.riders.filter((o) => !o.isPlayer && o.s - p.s > 3 && o.s - p.s < 90).sort((a, b) => a.s - b.s).slice(0, 3));
       for (let n = DRAW - 1; n >= 1; n--) {
@@ -455,21 +498,21 @@
           const c1 = seg.p1.camera, c2 = seg.p2.camera, zc = lerp(c1.z, c2.z, sp.pct), xc = lerp(c1.x, c2.x, sp.pct), yc = lerp(c1.y, c2.y, sp.pct);
           const sc = DEPTH / zc, pu = (sc * W) / 2, wf = lerp(seg.w1, seg.w2, sp.pct);
           const sx = W / 2 + sc * (xc + sp.off * ROAD_W * wf) * W / 2, sy = this.horizon - sc * yc * H / 2, hw = sc * ROAD_W * wf * W / 2;
-          if (sp.kind === 'scenery') { if (sp.sc.type === 'building') ctx.globalAlpha = fogA * clamp((n - 3) / 5, 0, 1); drawScenery(ctx, sp.sc, sx, sy, pu); } // very near facades fade out rather than blocking the view
+          if (sp.kind === 'scenery') { if (sp.sc.type === 'building') ctx.globalAlpha = fogA * clamp((n - 5) / 3, 0, 1); drawScenery(ctx, sp.sc, sx, sy, pu, O.mirror); } // very near facades fade out rather than blocking the view
           else if (sp.kind === 'obstacle') drawObstacle(ctx, sp.o, sx, sy, pu, hw);
           else if (sp.kind === 'crosswalk') drawCrosswalk(ctx, sx, sy, pu, hw);
           else if (sp.kind === 'signal') drawSignal(ctx, sx, sy, pu, race.junctions && race.junctions.some((j) => j.active && Math.abs(j.s - sp.d.s) < 12) ? 'amber' : 'green', this.t);
           else if (sp.kind === 'vehicle') drawVehicle(ctx, sp.v, sx, sy, pu, sp.v.mode === 'cross' ? 'side' : this.mirror ? 'front' : 'rear', this.t);
           else if (sp.kind === 'rider') {
-            const r = sp.r; this.stats.sprites[r.name] = { sx, sy, w: pu * RW }; r.yaw = clamp(track.curveAt(r.s) / 6, -1, 1) * 0.8 + r.lean * 0.25; const hopY = r.hop > 0 ? Math.sin(Math.PI * (1 - r.hop / 0.35)) * pu * 40 : 0;
+            const r = sp.r; this.stats.sprites[r.name] = { sx, sy, w: pu * O.rw }; r.yaw = clamp(track.curveAt(r.s) / 6, -1, 1) * 0.8 + r.lean * 0.25; const hopY = r.hop > 0 ? Math.sin(Math.PI * (1 - r.hop / 0.35)) * pu * 40 : 0;
             const dz = seg.p1.camera.z + sp.pct * SEG_LEN, fade = r.isPlayer ? 1 : clamp((dz - 390) / 90, 0, 1) * r.ghost; // short fade as a rival slips behind the camera; riders level with you stay solid
-            if (fade > 0.02) { ctx.globalAlpha = fade * fogA; drawRider(ctx, sx, sy - hopY, pu * RW, r, this.t); ctx.globalAlpha = fogA; this.stats.riders++; }
-            if (pu * RW > 28 && (r.isPlayer || tagged.has(r))) {
-              const sz = clamp(pu * RW * 0.2, 10, 20);
-              if (r.isPlayer) { ctx.save(); ctx.translate(sx, sy - pu * RW * 1.5); ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(15,15,30,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-sz * 0.6, -sz * 0.6); ctx.lineTo(sz * 0.6, -sz * 0.6); ctx.lineTo(0, sz * 0.4); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }
+            if (fade > 0.02) { ctx.globalAlpha = fade * fogA; drawRider(ctx, sx, sy - hopY, pu * O.rw, r, this.t, O.mirror); ctx.globalAlpha = fogA; this.stats.riders++; }
+            if (!O.mirror && pu * O.rw > 28 && (r.isPlayer || tagged.has(r))) { // (no name tags in the mirror: the image is flipped)
+              const sz = clamp(pu * O.rw * 0.2, 10, 20);
+              if (r.isPlayer) { ctx.save(); ctx.translate(sx, sy - pu * O.rw * 1.5); ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(15,15,30,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-sz * 0.6, -sz * 0.6); ctx.lineTo(sz * 0.6, -sz * 0.6); ctx.lineTo(0, sz * 0.4); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }
               else {
                 const label = r.status ? `${r.name} · ${r.status}` : r.name, stCol = r.status === 'SPRINT' ? '#ff8787' : r.status === 'ATTACK' ? '#ffd43b' : r.status === 'TIRED' ? '#9bd0ff' : '#fff';
-                ctx.font = `700 ${sz}px ${FONT}`; const tw = ctx.measureText(label).width + sz * 0.9, ty = sy - pu * RW * 1.45;
+                ctx.font = `700 ${sz}px ${FONT}`; const tw = ctx.measureText(label).width + sz * 0.9, ty = sy - pu * O.rw * 1.45;
                 rrect(ctx, sx - tw / 2, ty - sz * 0.75, tw, sz * 1.5, sz * 0.75); ctx.fillStyle = 'rgba(15,15,30,.6)'; ctx.fill();
                 ctx.fillStyle = stCol; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, sx, ty + 1);
               }
@@ -587,6 +630,19 @@
           ctx.fillText(me ? 'YOU' : o.finished ? 'FIN' : `${gapS > 0 ? '+' : '−'}${Math.abs(gapS).toFixed(1)}s`, lx + lw - S(10), yy);
         }); }
 
+      // rear-view mirror (a second, backward-looking render drawn flipped, like a real mirror)
+      if (hud.mirror && W > 900) {
+        const mx0 = W / 2 + S(66), mw = Math.min(S(330), W - S(256) - mx0 - S(12)), mh = mw * (hud.mirror.height / hud.mirror.width), my0 = S(14);
+        if (mw > S(180)) {
+          ctx.save(); rrect(ctx, mx0, my0, mw, mh, S(16)); ctx.clip();
+          ctx.translate(mx0 + mw, my0); ctx.scale(-1, 1); ctx.drawImage(hud.mirror, 0, 0, mw, mh);
+          ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.restore(); ctx.save();
+          const gl = ctx.createLinearGradient(mx0, my0, mx0 + mw, my0 + mh); gl.addColorStop(0, 'rgba(255,255,255,.28)'); gl.addColorStop(0.35, 'rgba(255,255,255,0)'); gl.addColorStop(1, 'rgba(0,0,0,.15)');
+          rrect(ctx, mx0, my0, mw, mh, S(16)); ctx.fillStyle = gl; ctx.fill(); ctx.lineWidth = 5; ctx.strokeStyle = INK; ctx.stroke(); ctx.restore();
+          text(ctx, 'REAR', mx0 + mw / 2, my0 + mh + S(11), S(12), '#fff', 'center');
+        }
+      }
+
       // minimap
       const ms = S(150), mx = W - ms - S(16), my = py + S(142);
       panel(ctx, mx, my, ms, ms, 'rgba(255,255,255,.85)');
@@ -658,5 +714,5 @@
     }
   }
 
-  Object.assign(C, { Renderer, fmtTime, drawItemIcon, zoneColor });
+  Object.assign(C, { Renderer, buildMirrorView, fmtTime, drawItemIcon, zoneColor });
 })();

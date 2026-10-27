@@ -83,6 +83,9 @@
   .stat b { display:block; font-size:20px; } .stat span { font-size:11px; opacity:.7; }
   h3 { margin:8px 0 2px; font-size:16px; }
   #results .card { padding:14px 22px; } #results td { padding:3px 8px; font-size:14px; } #results h1 { margin-bottom:4px; }
+  .savebox { margin-top:10px; border:3px dashed var(--ink); border-radius:14px; padding:6px 12px 10px; background:#fff; }
+  .linkbtn { display:inline-flex; align-items:center; min-height:44px; font-weight:800; padding:0 6px; color:#1c7ed6; }
+  .photos { display:flex; gap:6px; overflow-x:auto; margin-top:8px; } .photos img { height:54px; border:2px solid var(--ink); border-radius:8px; }
   .pts { text-align:right; } .trophy { font-size:28px; }
 </style>
 </head>
@@ -217,6 +220,12 @@
     <table><thead><tr><th>#</th><th>Rider</th><th>Time</th><th class="pts">Avg power</th><th class="pts" id="thPts" hidden>Points</th></tr></thead><tbody id="resultsBody"></tbody></table>
     <div class="stats" id="resultsStats"></div>
     <canvas id="powerChart" width="600" height="96"></canvas>
+    <div id="saveBox" class="savebox">
+      <h3>Save your ride</h3>
+      <div class="row"><button id="btnFit" class="alt" type="button" disabled>Save ride (.fit)</button><button id="btnPhotos" class="alt" type="button" disabled>Save race photos (.zip)</button><a class="linkbtn" href="https://www.strava.com/upload/select" target="_blank" rel="noopener">Open Strava upload</a></div>
+      <div id="saveHint" class="hint">Upload the .fit on Strava: it arrives as a Virtual Ride with power, cadence, heart rate, laps and a map. Strava doesn't let apps attach pictures, so add the photos from the zip to the activity yourself.</div>
+      <div id="photoStrip" class="photos"></div>
+    </div>
     <div id="champBox" hidden><h3 id="champTitle">Championship standings</h3><table><tbody id="champBody"></tbody></table></div>
     <div class="row" style="justify-content:center"><button id="btnNext" class="go" style="font-size:20px" hidden>Next race</button><button id="btnAgain" class="go" style="font-size:20px">Race again</button><button id="btnMenu" class="alt">Menu</button></div>
   </div>
@@ -235,6 +244,8 @@
 <script src="js/course.js"></script>
 <script src="js/sim.js"></script>
 <script src="js/render.js"></script>
+<script src="js/export.js"></script>
+<script src="js/share.js"></script>
 <script src="js/audio.js"></script>
 <script src="js/main.js"></script>
 </body>

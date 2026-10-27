@@ -195,5 +195,31 @@
     };
   }
 
-  Object.assign(C, { VEHICLE_TYPES, CAR_COLORS, UNIT, SEG_LEN, VEXAG, NARROW, OBSTACLE_RADIUS, COURSES, THEMES, buildTrack });
+  // The same road driven the other way (for the rear-view mirror): position s -> length - s, lateral x -> -x,
+  // bends and slopes flip sign, scenery swaps sides. Obstacles/decals are live views of the originals.
+  function reverseTrack(track) {
+    if (track._rev) return track._rev;
+    const N = track.N, L = track.length, segs = [];
+    for (let j = 0; j < N; j++) {
+      const src = track.segs[N - 1 - j];
+      segs.push({
+        i: j, curve: -src.curve, deg: -src.deg, grade: -src.grade, w1: src.w2, w2: src.w1, walls: src.walls,
+        y1: src.y2, y2: src.y1, alt: j % 2, scenery: src.scenery.map((sc) => Object.assign({}, sc, { off: -sc.off })),
+        p1: { world: { y: src.y2, z: j * SEG_LEN }, camera: {}, screen: {} },
+        p2: { world: { y: src.y1, z: (j + 1) * SEG_LEN }, camera: {}, screen: {} },
+      });
+    }
+    const flip = (o, extra) => Object.create(o, Object.assign({ s: { value: L - o.s }, x: { value: -(o.x || 0) } }, extra || {}));
+    const rev = Object.assign({}, track, {
+      segs, reversed: true, _rev: null,
+      gradeAt: (s) => -track.gradeAt(L - s), curveAt: (s) => -track.curveAt(L - s), widthAt: (s) => track.widthAt(L - s),
+      wallsAt: (s) => track.wallsAt(L - s), elevationAt: (s) => track.elevationAt(L - s),
+      obstacles: track.obstacles.map((o) => flip(o)),
+      decals: (track.decals || []).map((d) => flip(d, d.side ? { side: { value: -d.side } } : {})),
+    });
+    track._rev = rev;
+    return rev;
+  }
+
+  Object.assign(C, { reverseTrack, VEHICLE_TYPES, CAR_COLORS, UNIT, SEG_LEN, VEXAG, NARROW, OBSTACLE_RADIUS, COURSES, THEMES, buildTrack });
 })();
