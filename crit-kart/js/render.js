@@ -237,7 +237,7 @@
   }
 
   class Renderer {
-    constructor(canvas) { this.cv = canvas; this.ctx = canvas.getContext('2d'); this.bg = 0; this.pitch = 0; this.horizon = 360; this.resize(); }
+    constructor(canvas) { this.cv = canvas; this.ctx = canvas.getContext('2d'); this.bg = 0; this.pitch = 0; this.horizon = 360; this.stats = { riders: 0 }; this.resize(); }
 
     resize() {
       const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -345,8 +345,10 @@
       for (const b of race.boxes) if (b.active) put(b.s, { kind: 'box', off: b.x, b });
       for (const h of race.hazards) put(h.s, { kind: 'banana', off: h.x });
       for (const pr of race.projectiles) put(pr.s, { kind: 'proj', off: pr.x, pr });
-      for (const r of race.riders) put(r.s, { kind: 'rider', off: r.x, r, minN: r.isPlayer ? 1 : 3 });
+      this.stats = { riders: 0 };
+      for (const r of race.riders) put(r.s, { kind: 'rider', off: r.x, r });
 
+      const tagged = new Set(race.riders.filter((o) => !o.isPlayer && o.s - p.s > 3 && o.s - p.s < 90).sort((a, b) => a.s - b.s).slice(0, 3));
       for (let n = DRAW - 1; n >= 1; n--) {
         const list = buckets[n];
         const seg = segs[(baseI + n) % N], a = seg.p1.screen, b = seg.p2.screen;
@@ -361,8 +363,10 @@
           if (sp.kind === 'scenery') drawScenery(ctx, sp.sc, sx, sy, pu);
           else if (sp.kind === 'obstacle') drawObstacle(ctx, sp.o, sx, sy, pu, hw);
           else if (sp.kind === 'rider') {
-            const r = sp.r; r.yaw = clamp(track.curveAt(r.s) / 6, -1, 1) * 0.8 + r.lean * 0.25; const hopY = r.hop > 0 ? Math.sin(Math.PI * (1 - r.hop / 0.35)) * pu * 40 : 0; drawRider(ctx, sx, sy - hopY, pu * RW, r, this.t);
-            if (pu * RW > 28) {
+            const r = sp.r; r.yaw = clamp(track.curveAt(r.s) / 6, -1, 1) * 0.8 + r.lean * 0.25; const hopY = r.hop > 0 ? Math.sin(Math.PI * (1 - r.hop / 0.35)) * pu * 40 : 0;
+            const dz = seg.p1.camera.z + sp.pct * SEG_LEN, fade = r.isPlayer ? 1 : clamp((dz - 390) / 90, 0, 1); // short fade as a rival slips behind the camera; riders level with you stay solid
+            if (fade > 0.02) { ctx.globalAlpha = fade; drawRider(ctx, sx, sy - hopY, pu * RW, r, this.t); ctx.globalAlpha = 1; this.stats.riders++; }
+            if (pu * RW > 28 && (r.isPlayer || tagged.has(r))) {
               const sz = clamp(pu * RW * 0.2, 10, 20);
               if (r.isPlayer) { ctx.save(); ctx.translate(sx, sy - pu * RW * 1.5); ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(15,15,30,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-sz * 0.6, -sz * 0.6); ctx.lineTo(sz * 0.6, -sz * 0.6); ctx.lineTo(0, sz * 0.4); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }
               else {
@@ -465,6 +469,20 @@
       const gap = (o) => Math.abs(o.s - p.s) / Math.max(4, p.v);
       if (ahead) text(ctx, `▲ ${ahead.name} +${gap(ahead).toFixed(1)}s`, rx + rw - S(10), py + S(90), S(15), '#ffd7e8', 'right');
       if (behind) text(ctx, `▼ ${behind.name} -${gap(behind).toFixed(1)}s`, rx + rw - S(10), py + S(110) + S(4), S(15), '#d7f0ff', 'right');
+
+      // leaderboard (all riders, gap in seconds to you)
+      { const rows = order.length, rh = S(21), lx = S(16), ly = py + ph + S(100), lw = S(210);
+        panel(ctx, lx, ly, lw, rows * rh + S(14), 'rgba(15,15,30,.55)', S(12));
+        order.forEach((o, i) => {
+          const yy = ly + S(7) + i * rh + rh / 2, me = o === p, gapS = (o.s - p.s) / Math.max(4, p.v);
+          if (me) { ctx.fillStyle = 'rgba(255,255,255,.22)'; rrect(ctx, lx + S(4), yy - rh / 2 + 1, lw - S(8), rh - 2, S(8)); ctx.fill(); }
+          ctx.font = `800 ${S(13)}px ${FONT}`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left'; ctx.lineWidth = 0;
+          ctx.fillStyle = '#fff'; ctx.fillText(String(i + 1), lx + S(10), yy);
+          ctx.fillStyle = o.color; ellipse(ctx, lx + S(34), yy, S(5), S(5)); ctx.fill();
+          ctx.fillStyle = me ? '#ffe066' : '#fff'; ctx.fillText(o.name.length > 13 ? o.name.slice(0, 12) + '…' : o.name, lx + S(46), yy);
+          ctx.textAlign = 'right'; ctx.fillStyle = me ? '#ffe066' : gapS > 0 ? '#ffb3c8' : '#b3e0ff';
+          ctx.fillText(me ? 'YOU' : o.finished ? 'FIN' : `${gapS > 0 ? '+' : '−'}${Math.abs(gapS).toFixed(1)}s`, lx + lw - S(10), yy);
+        }); }
 
       // minimap
       const ms = S(150), mx = W - ms - S(16), my = py + S(142);

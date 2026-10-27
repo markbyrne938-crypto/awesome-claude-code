@@ -235,7 +235,7 @@
   const currentCourseId = () => (state.champ ? state.champ.rounds[state.champ.round] : cfg.course);
   function makeRace() {
     const def = C.COURSES.find((c) => c.id === currentCourseId()) || C.COURSES[0];
-    return new C.Race({ track: C.buildTrack(def), laps: lapsFor(def), mass: cfg.weight + 9, pace: cfg.ftp * 0.88, difficulty: cfg.difficulty });
+    return new C.Race({ track: C.buildTrack(def), laps: lapsFor(def), mass: cfg.weight + 9, pace: cfg.ftp * 0.8, difficulty: cfg.difficulty });
   }
   function makeDemo() { if (state.mode === 'menu') state.race = makeRace(); }
 
@@ -409,6 +409,6 @@
   }
 
   refreshLabels(); makeDemo();
-  window.CritDebug = { state, cfg, trainer, ride, startRace, toMenu, showResults, onRideMessage, rideSteer };
+  window.CritDebug = { renderer, state, cfg, trainer, ride, startRace, toMenu, showResults, onRideMessage, rideSteer };
   requestAnimationFrame(frame);
 })();

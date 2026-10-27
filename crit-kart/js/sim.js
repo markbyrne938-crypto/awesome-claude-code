@@ -42,13 +42,13 @@
       this.player = player;
       const aiList = AI_RIDERS.slice();
       const slots = 8;
-      const playerSlot = 5;
+      const playerSlot = 7; // back of the grid: all seven rivals start ahead and in view
       for (let i = 0; i < slots; i++) {
         let r;
         if (i === playerSlot) r = player;
-        else { const [n, c] = aiList.shift(); r = new Rider(n, c, false); r.ai = { f: rand(0.88, 1.1), lane: rand(-0.6, 0.6), itemT: 0, attackT: rand(15, 40), attacking: 0, phase: Math.random() * 6, sloppy: Math.random() < 0.3 }; }
+        else { const [n, c] = aiList.shift(); r = new Rider(n, c, false); r.ai = { f: rand(0.93, 1.07), lane: rand(-0.6, 0.6), itemT: 0, attackT: rand(15, 40), attacking: 0, phase: Math.random() * 6, sloppy: Math.random() < 0.3 }; }
         const row = Math.floor(i / 2), col = i % 2;
-        r.s = -(row * 3.2 + 1.5); r.x = col ? 0.35 : -0.35;
+        r.s = -(row * 2.8 + 1.5); r.x = col ? 0.35 : -0.35;
         this.riders.push(r);
       }
       this.boxes = [];
@@ -273,7 +273,8 @@
       if (a.attacking > 0) { a.attacking -= dt; w *= 1.3; if (a.attacking <= 0) a.attackT = rand(25, 60); }
       else if (a.attackT <= 0) a.attacking = rand(6, 11);
       const gap = r.s - p.s;
-      if (gap > 150) w *= 0.92; else if (gap < -150) w *= 1.08; // gentle rubber band keeps the race alive
+      // rubber band: the bunch eases off when far ahead of you and chases when dropped, so you always have a pack to race
+      if (gap > 50) w *= 1 - clamp((gap - 50) / 300, 0, 0.13); else if (gap < -50) w *= 1 + clamp((-gap - 50) / 300, 0, 0.15);
       r.power = Math.max(0, w);
 
       // steering: lane + box seeking + hazard dodging
