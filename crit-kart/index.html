@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Crit Kart</title>
+<style>
+  :root { --ink:#1b1b2f; --pink:#ff5fa2; --yellow:#ffd43b; --blue:#4dabf7; --card:#fffdf5; }
+  * { box-sizing: border-box; }
+  html, body { margin:0; height:100%; overflow:hidden; background:#9be3ff; font-family:"Trebuchet MS","Arial Rounded MT Bold",system-ui,sans-serif; color:var(--ink); }
+  canvas { position:fixed; inset:0; display:block; }
+  .overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:16px; overflow:auto; background:rgba(20,20,50,.35); }
+  .overlay[hidden], [hidden] { display:none !important; }
+  .card { background:var(--card); border:5px solid var(--ink); border-radius:26px; box-shadow:0 8px 0 var(--ink); padding:22px 26px; width:min(920px,100%); max-height:100%; overflow:auto; }
+  h1 { margin:0 0 2px; font-size:clamp(34px,6vw,58px); letter-spacing:1px; color:var(--pink); -webkit-text-stroke:3px var(--ink); paint-order:stroke fill; text-shadow:0 4px 0 var(--ink); }
+  .sub { margin:0 0 14px; font-weight:700; opacity:.8; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
+  .box { border:3px solid var(--ink); border-radius:18px; padding:12px 14px; background:#fff; }
+  .box h2 { margin:0 0 8px; font-size:18px; }
+  label { display:block; font-weight:700; font-size:14px; margin:8px 0 2px; }
+  input[type=number], select { width:100%; padding:8px 10px; border:3px solid var(--ink); border-radius:12px; font:inherit; font-weight:700; background:#fff; }
+  input[type=range] { width:100%; accent-color:var(--pink); }
+  button { font:inherit; font-weight:800; cursor:pointer; border:4px solid var(--ink); border-radius:14px; padding:9px 14px; background:var(--yellow); box-shadow:0 4px 0 var(--ink); }
+  button:active { transform:translateY(3px); box-shadow:0 1px 0 var(--ink); }
+  button.go { background:var(--pink); color:#fff; font-size:24px; padding:12px 30px; text-shadow:0 2px 0 var(--ink); }
+  button.alt { background:#fff; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:8px; }
+  .status { font-size:13px; font-weight:700; margin-top:8px; min-height:18px; color:#1b7f3b; }
+  .status.bad { color:#c92a2a; }
+  .warn { background:#fff3bf; border:3px solid var(--ink); border-radius:12px; padding:8px 12px; font-weight:700; margin-bottom:12px; font-size:14px; }
+  .keys { font-size:13px; line-height:1.6; }
+  kbd { background:#fff; border:2px solid var(--ink); border-radius:6px; padding:0 6px; font-weight:800; }
+  details { margin-top:12px; } summary { cursor:pointer; font-weight:800; }
+  pre#log { background:#101028; color:#9affc2; padding:10px; border-radius:12px; font-size:11px; min-height:60px; max-height:180px; overflow:auto; white-space:pre-wrap; }
+  table { width:100%; border-collapse:collapse; font-weight:700; margin:8px 0; }
+  td { padding:6px 8px; border-bottom:2px dashed #ccc; } tr.me td { background:#ffe3f0; }
+  td i { display:inline-block; width:14px; height:14px; border-radius:50%; border:2px solid var(--ink); margin-right:8px; vertical-align:-2px; }
+  .start { text-align:center; margin-top:16px; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="menu" class="overlay">
+  <div class="card">
+    <h1>CRIT KART</h1>
+    <p class="sub">Power-meter pedal racing. Your watts drive the bike, steer for item boxes, bomb your rivals.</p>
+    <div id="bleWarn" class="warn" hidden>This browser has no Web Bluetooth. Use Chrome or Edge (desktop / Android) to connect a trainer. You can still play with the keyboard.</div>
+    <div class="grid">
+      <div class="box">
+        <h2>1 · Trainer (power)</h2>
+        <div>Any smart trainer or power meter that speaks FTMS or Cycling Power — the same Bluetooth profiles Zwift and MyWhoosh use.</div>
+        <div class="row"><button id="btnTrainer">Connect trainer</button></div>
+        <div id="trainerStatus" class="status"></div>
+      </div>
+      <div class="box">
+        <h2>2 · Zwift Ride controls (steering)</h2>
+        <div>Experimental. Close Zwift / Companion first — only one app can hold the controls.</div>
+        <div class="row"><button id="btnRide">Connect controls</button><button id="btnCal" class="alt">Calibrate steering</button></div>
+        <div class="row"><button id="btnBind" class="alt">Bind item button</button><button id="btnUnbind" class="alt">Any button</button></div>
+        <div id="rideStatus" class="status"></div>
+      </div>
+      <div class="box">
+        <h2>Race</h2>
+        <label for="course">Course</label><select id="course"></select>
+        <div id="courseBlurb" class="sub" style="font-size:13px;margin:6px 0 0"></div>
+        <label for="laps">Laps: <span id="lapsVal"></span></label><input id="laps" type="range" min="2" max="16" step="1">
+      </div>
+      <div class="box">
+        <h2>You</h2>
+        <label for="ftp">FTP / threshold (W) — sets rivals' pace</label><input id="ftp" type="number" min="60" max="600">
+        <label for="weight">Rider weight (kg)</label><input id="weight" type="number" min="35" max="140">
+        <label for="difficulty">Rival strength: <span id="diffVal"></span></label><input id="difficulty" type="range" min="0.75" max="1.25" step="0.05">
+        <label for="gradeFeel">Trainer hill feel: <span id="feelVal"></span></label><input id="gradeFeel" type="range" min="0" max="1" step="0.1">
+        <label><input id="invert" type="checkbox"> Invert steering</label>
+      </div>
+      <div class="box keys">
+        <h2>Keyboard (no trainer)</h2>
+        <kbd>↑</kbd>/<kbd>↓</kbd> raise / lower watts · <kbd>←</kbd>/<kbd>→</kbd> steer<br>
+        <kbd>Space</kbd> use item · <kbd>Esc</kbd> pause<br>
+        Draft behind riders to save watts, grab <b>?</b> boxes, and use items wisely.
+      </div>
+    </div>
+    <div class="start"><button id="btnStart" class="go">START RACE</button></div>
+    <details><summary>Bluetooth debug log</summary><pre id="log"></pre></details>
+  </div>
+</div>
+
+<div id="results" class="overlay" hidden>
+  <div class="card" style="width:min(560px,100%)">
+    <h1 style="font-size:40px">RESULTS</h1>
+    <table><tbody id="resultsBody"></tbody></table>
+    <div id="resultsStats" class="sub"></div>
+    <div class="row" style="justify-content:center"><button id="btnAgain" class="go" style="font-size:20px">Race again</button><button id="btnMenu" class="alt">Menu</button></div>
+  </div>
+</div>
+<div id="hudbar" hidden></div>
+
+<script src="js/ble.js"></script>
+<script src="js/course.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/render.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
