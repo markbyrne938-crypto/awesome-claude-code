@@ -352,7 +352,7 @@
       const wkg = cfg.ftp / cfg.weight; badge.hidden = false;
       badge.textContent = `${wkg.toFixed(1)} W/kg: you'd race in Cat ${C.riderCategory(wkg)}`;
       const pv = C.rivalPreview(cfg.ftp, cfg.cat);
-      $('rivalPreview').innerHTML = `Rivals ride about <b>${Math.round(pv.lo)}–${Math.round(pv.hi)} W</b> (average ≈ ${Math.round(pv.avg)} W, ${(pv.avg / cfg.weight).toFixed(1)} W/kg).<small>Cat ${cfg.cat} · ${cat.name}: ${cat.blurb}. Based on your FTP of ${cfg.ftp} W.</small>`;
+      $('rivalPreview').innerHTML = `Rivals ride about <b>${Math.round(pv.lo)}–${Math.round(pv.hi)} W</b> (average ≈ ${Math.round(pv.avg)} W, ${(pv.avg / cfg.weight).toFixed(1)} W/kg).<small>Cat ${cfg.cat} · ${cat.name}: ${cat.blurb}. They fade a little late in the race and sprint harder at the finish. Based on your FTP of ${cfg.ftp} W.</small>`;
     } else {
       badge.hidden = true;
       $('rivalPreview').textContent = ftpValid() ? 'Enter your weight to see your category.' : 'Enter your FTP to see how hard the rivals ride.';

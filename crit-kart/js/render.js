@@ -210,11 +210,14 @@
       ctx.strokeStyle = '#fff'; ctx.lineWidth = pu * 60 * s; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -pu * 380 * s); ctx.arc(pu * 80 * s, -pu * 380 * s, pu * 80 * s, Math.PI, 0); ctx.stroke();
       ctx.strokeStyle = '#ff4d6d'; ctx.setLineDash([pu * 30 * s, pu * 50 * s]); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -pu * 380 * s); ctx.stroke(); ctx.setLineDash([]);
     } else if (sp.type === 'building') {
-      const bw = 1100 * s, bh = (1800 + (sp.hue % 7) * 420) * s, rows = Math.max(3, Math.floor(bh / 280)), cols = 4;
-      const base = `hsl(${sp.hue},22%,${58 + (sp.hue % 3) * 5}%)`;
-      const g = ctx.createLinearGradient(-bw / 2 * pu, 0, bw / 2 * pu, 0); g.addColorStop(0, `hsl(${sp.hue},22%,${66 + (sp.hue % 3) * 4}%)`); g.addColorStop(1, `hsl(${sp.hue},22%,${48 + (sp.hue % 3) * 4}%)`);
-      ctx.fillStyle = g; ctx.fillRect(-bw / 2 * pu, -bh * pu, bw * pu, bh * pu); ctx.lineWidth = Math.max(1, pu * 8); ctx.strokeStyle = 'rgba(20,20,40,.7)'; ctx.strokeRect(-bw / 2 * pu, -bh * pu, bw * pu, bh * pu);
+      const bw = 1100 * s, bh = (1800 + (sp.hue % 7) * 420) * s, rows = Math.max(3, Math.floor(bh / 280)), cols = 4, wpx = bw * pu;
+      // level of detail: far buildings are a flat block, mid-distance ones get a gradient, only near ones get windows
+      if (wpx < 14) { ctx.fillStyle = `hsl(${sp.hue},22%,56%)`; ctx.fillRect(-bw / 2 * pu, -bh * pu, bw * pu, bh * pu); ctx.restore(); return; }
+      const lod = wpx < 60 ? 1 : 2;
+      if (lod === 2) { const g = ctx.createLinearGradient(-bw / 2 * pu, 0, bw / 2 * pu, 0); g.addColorStop(0, `hsl(${sp.hue},22%,${66 + (sp.hue % 3) * 4}%)`); g.addColorStop(1, `hsl(${sp.hue},22%,${48 + (sp.hue % 3) * 4}%)`); ctx.fillStyle = g; } else ctx.fillStyle = `hsl(${sp.hue},22%,${58 + (sp.hue % 3) * 5}%)`;
+      ctx.fillRect(-bw / 2 * pu, -bh * pu, bw * pu, bh * pu); ctx.lineWidth = Math.max(1, pu * 8); ctx.strokeStyle = 'rgba(20,20,40,.7)'; ctx.strokeRect(-bw / 2 * pu, -bh * pu, bw * pu, bh * pu);
       ctx.fillStyle = 'rgba(0,0,0,.2)'; ctx.fillRect(-bw / 2 * pu, -bh * pu, bw * pu, pu * 70); // roof edge
+      if (lod === 1) { ctx.fillStyle = '#33406a'; for (let r = 0; r < rows - 1; r += 2) ctx.fillRect((-bw / 2 + bw * 0.12) * pu, (-bh + 150 * s + r * ((bh - 420 * s) / (rows - 1))) * pu, bw * 0.76 * pu, 150 * s * pu); ctx.restore(); return; }
       for (let r = 0; r < rows - 1; r++) for (let c = 0; c < cols; c++) {
         const wx = (-bw / 2 + bw * (c + 0.5) / cols - 80 * s) * pu, wy = (-bh + 150 * s + r * ((bh - 420 * s) / (rows - 1))) * pu, lit = (sp.hue + r * 7 + c * 3) % 5 === 0;
         ctx.fillStyle = lit ? '#ffe3a0' : '#33406a'; ctx.fillRect(wx, wy, 160 * s * pu, 150 * s * pu);
@@ -487,10 +490,11 @@
         const seg = segs[(baseI + n) % N], a = seg.p1.screen, b = seg.p2.screen;
         if (!list && !seg.walls) continue;
         if (!a.scale || a.scale < 0 || seg.p1.camera.z <= DEPTH) continue;
-        const clip = Math.min(H, seg.clip);
-        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, clip + (clip < H ? 2 : 0)); ctx.clip();
+        const clip = Math.min(H, seg.clip), needClip = clip < a.y - 2; // clipping is only needed where a nearer crest hides part of this segment's sprites
+        ctx.save(); if (needClip) { ctx.beginPath(); ctx.rect(0, 0, W, clip + 2); ctx.clip(); }
         if (seg.walls) this.drawWalls(seg, a, b, th);
         const fogA = clamp(1 - (n / DRAW) * (n / DRAW) * 1.1, 0, 1);
+        if (fogA < 0.08) { ctx.restore(); continue; } // lost in the fog
         for (const sp of list || []) {
           ctx.globalAlpha = fogA;
           // Project the sprite's own world position exactly (camera-relative z/x/y interpolated along the road polyline), instead of
@@ -498,6 +502,7 @@
           const c1 = seg.p1.camera, c2 = seg.p2.camera, zc = lerp(c1.z, c2.z, sp.pct), xc = lerp(c1.x, c2.x, sp.pct), yc = lerp(c1.y, c2.y, sp.pct);
           const sc = DEPTH / zc, pu = (sc * W) / 2, wf = lerp(seg.w1, seg.w2, sp.pct);
           const sx = W / 2 + sc * (xc + sp.off * ROAD_W * wf) * W / 2, sy = this.horizon - sc * yc * H / 2, hw = sc * ROAD_W * wf * W / 2;
+          if (sp.kind === 'scenery' && pu * 400 < 1.6) continue; // too small to see
           if (sp.kind === 'scenery') { if (sp.sc.type === 'building') ctx.globalAlpha = fogA * clamp((n - 5) / 3, 0, 1); drawScenery(ctx, sp.sc, sx, sy, pu, O.mirror); } // very near facades fade out rather than blocking the view
           else if (sp.kind === 'obstacle') drawObstacle(ctx, sp.o, sx, sy, pu, hw);
           else if (sp.kind === 'crosswalk') drawCrosswalk(ctx, sx, sy, pu, hw);

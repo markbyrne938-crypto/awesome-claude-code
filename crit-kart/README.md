@@ -21,6 +21,8 @@ No trainer? Play with the keyboard: `↑/↓` watts, `←/→` steer, `Space` (o
 |---|---|---|
 | Power / cadence | BLE **FTMS** Indoor Bike Data (0x1826 / 0x2AD2), falling back to **Cycling Power** (0x1818 / 0x2A63), the same open profiles Zwift and MyWhoosh read | Standard; parsers unit-tested |
 | Hills on the trainer | FTMS control point: request control, start, then *Set Indoor Bike Simulation Parameters* (0x11) with the course gradient (scaled by the "hill feel" slider) | Standard; not tested on hardware |
+| Heart rate monitor | BLE **Heart Rate** service (0x180D / 0x2A37) | Standard; parser unit-tested |
+| Cadence sensor | BLE **Cycling Speed & Cadence** (0x1816 / 0x2A5B), preferred over the trainer's own cadence | Standard; parser unit-tested |
 | Zwift Ride steering + buttons | Zwift's custom service `0xFC82`: handshake `RideOn`, protobuf notifications | **Community reverse-engineering written from memory; untested on a real controller** |
 
 ### Zwift Ride caveats (please read)
@@ -51,17 +53,22 @@ The Zwift Ride protocol is not public and I could not check it against a device.
 
   | Category | Rivals ride about | Feel |
   |---|---|---|
-  | D · Social | 0.87 x FTP | relaxed group ride |
-  | C · Steady | 0.98 x FTP | a bit under FTP |
-  | **B · Even (default)** | **1.03 x FTP** | at or just above FTP |
-  | A · Hard | 1.10 x FTP | clearly above FTP |
+  | D · Social | ~0.90 x FTP | relaxed group ride |
+  | C · Steady | ~1.00 x FTP | around FTP |
+  | **B · Even (default)** | **~1.02-1.05 x FTP** | at or just above FTP |
+  | A · Hard | ~1.10-1.14 x FTP | clearly above FTP |
 
-  (Each rival varies +-4 % and attacks now and then, so the figures are averages; they're pinned by `test/sim.test.js`.) The menu shows your own Zwift-style category from W/kg (A 4.0+, B 3.2+, C 2.5+, D below) and previews the rivals' watts. Results list every rider's average power. You start at the back of the grid with the bunch ahead in view, and a Zwift-style leaderboard lists all eight with live gaps (the camera is behind you, so riders behind aren't on screen).
+  (Averages over a race, pinned by `test/sim.test.js`: each rival varies, attacks now and then, fades a little late in the race and sprints at the end.) The menu shows your own Zwift-style category from W/kg (A 4.0+, B 3.2+, C 2.5+, D below) and previews the rivals' watts. Results list every rider's average power. You start at the back of the grid with the bunch ahead in view, and a Zwift-style leaderboard lists all eight with live gaps (the camera is behind you, so riders behind aren't on screen).
+* **Rivals tire and sprint**: every rival has a stamina rating and a limited reserve for attacks that drains when they go hard and refills slowly. Their power fades gently through the race (more for low-stamina riders) and in the last 160-320 m everyone who can goes for it: a rider with energy left sprints at 1.3-1.7x, a spent one barely lifts. Nearby rivals carry a SPRINT / ATTACK / TIRED tag, and you get a **BELL LAP** call on the last lap and a **SPRINT** call at 300 m to go.
+* **Downtown Dash (city course)**: a block loop with four sharp corners, a continuous façade of buildings, street trees and lamps, zebra crossings and traffic signals. Traffic can hurt: **parked SUVs, cars and vans** whose doors open as you pass (some pull out), **moving traffic** that signals and drifts toward the middle of the road, and **cars crossing at the junction**. A hit stuns and slows you (a shield blocks it). Rivals and auto-steer steer around traffic (cross traffic can't be dodged, so some rivals get caught too), and the HUD warns you ("CAR CROSSING AHEAD!", "CAR PULLING OUT!", "PARKED CARS: WATCH THE DOORS").
+* **Rear-view mirror**: a second render of the road behind you (reversed track), drawn flipped like a real mirror, with riders and traffic approaching from the front. Toggle in Advanced settings.
+* **Heart rate and cadence**: connect a heart rate strap and/or a cadence sensor in the menu. The HUD shows cadence and a zone-coloured heart rate (set your max HR in Advanced); both go into the saved ride and the results.
+* **Save your ride for Strava**: after a race, **Save ride (.fit)** writes a Garmin FIT activity (cycling / virtual activity, 1 Hz power, cadence, heart rate, speed, distance, virtual altitude, per-lap and session summaries with normalized power, TSS and your FTP). By default it includes a **virtual map**: the course loop placed in open ocean (no real location), like a virtual world's map; turn that off in Advanced. **Save race photos (.zip)** gives you a results card plus photos from the start, an overtake, a crash, the sprint and the finish. Strava does not let apps attach pictures to an activity, so upload the .fit at strava.com/upload and add the photos yourself. *Not yet tried against Strava itself: the file is checked with an independent FIT reader (CRCs, structure, values) in the tests.*
 * **Steering off (no controller needed)**: in the Race section set **Steering** to *Off: auto-follow*. Your rider then holds the wheel of the rider in front to get the draft, pulls out to the freer side and overtakes when you're going faster (it stays tucked in until it's nearly on their wheel, or pulls out early if you're clearly quicker), dodges cones, barrels and potholes, keeps off the barriers, and grabs item boxes when that doesn't cost the draft. Items can be used automatically (checkbox), or by clicking/tapping the screen or pressing Space. Press **T** during a race to switch steering on/off. Finishing position then depends on your power, not on steering skill.
 * **Smooth motion**: riders and objects are projected exactly (not interpolated between road segments), grade/bend/width are blended smoothly along the track, sideways movement has inertia (the bike leans in, then moves over) and lane changes ease in, bumps bleed speed off over ~0.2 s, pedalling uses a natural cadence (your trainer's real cadence for you), and the bike rocks gently with the stroke. Sprite jerk (second difference of on-screen position at 60 Hz) fell from ~4-8 px to under 1.5 px.
 * **No collisions**: as in Zwift, riders pass straight through each other (no shoving at the start or in the pack). Overlapping rivals turn slightly see-through so a crowded grid or a pass stays readable.
-* **Courses**: Sunny Meadows Crit (~520 m), Candy Canyon (steep and narrow, ~580 m, 3/4 of the laps), Neon Harbor Night Crit (the technical one, ~500 m). The menu estimates your race time from your FTP.
-* **Championship**: all three courses in a row, 10-8-6-5-4-3-2-1 points, final standings and a champion title.
+* **Courses**: Sunny Meadows Crit (~520 m), Candy Canyon (steep and narrow, ~580 m, 3/4 of the laps), Neon Harbor Night Crit (the technical one, ~500 m), Downtown Dash (city traffic, ~530 m). The menu estimates your race time from your FTP.
+* **Championship**: all four courses in a row, 10-8-6-5-4-3-2-1 points, final standings and a champion title.
 * **Results**: average / normalized power, W/kg, best lap, and a per-second power chart coloured by zone against your FTP.
 * **Safety nets**: a dropped trainer pauses the race and auto-reconnects (it never silently falls back to keyboard power); the race pauses when the tab is hidden; the screen is kept awake during races; "no power signal" warning if data stalls.
 * **Feel**: sound effects (synthesized), lap times with best-lap highlight, position-change toasts, steering sensitivity and invert options.
@@ -70,9 +77,9 @@ The Zwift Ride protocol is not public and I could not check it against a device.
 ## Tests
 
 ```bash
-node test/sim.test.js   # parsers, loop closure, full 12-lap races on every course
+node test/sim.test.js   # parsers, physics, AI (categories, tire/sprint, auto-steer), city traffic, mirror geometry, FIT + ZIP export
 ```
 
 ## Layout
 
-`js/ble.js` Bluetooth + parsers · `js/course.js` courses/track · `js/sim.js` physics, AI, items · `js/render.js` pseudo-3D renderer + HUD · `js/audio.js` sound effects · `js/main.js` UI/input/loop/championship.
+`js/ble.js` Bluetooth + parsers · `js/course.js` courses/track · `js/sim.js` physics, AI, items · `js/render.js` pseudo-3D renderer + HUD · `js/audio.js` sound effects · `js/export.js` FIT/ZIP/recorder · `js/share.js` race photos + results card · `js/main.js` UI/input/loop/championship · `test/fitdecode.js` independent FIT reader for the tests.
