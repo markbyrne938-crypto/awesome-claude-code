@@ -432,8 +432,13 @@
   }
 
   let last = performance.now();
+  const debug = { manual: false }; // manual: a test harness drives tick() itself at a fixed step (used for smooth, deterministic captures)
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    if (!debug.manual) tick(dt, now);
+    requestAnimationFrame(frame);
+  }
+  function tick(dt, now) {
     const race = state.race;
     const staleTrainer = trainer.link && now - trainer.lastSeen > 3000;
     if (state.mode === 'race' && !state.paused && race) {
@@ -445,7 +450,7 @@
       if (cfg.invertSteer) steer = -steer;
       steer = clamp(steer * cfg.sens, -1, 1);
       const power = trainer.link ? (fresh ? trainer.power : 0) : kb.power; // a dropped trainer never silently becomes keyboard power
-      const input = { power, steer, use: ride.use };
+      const input = { power, steer, use: ride.use, cadence: trainer.link && fresh ? trainer.cadence : 0 };
       ride.use = false;
       for (let rem = dt; rem > 1e-4; rem -= 1 / 60) { race.update(Math.min(rem, 1 / 60), input); input.use = false; }
       handleEvents(race);
@@ -481,11 +486,10 @@
         useHint: race.autoSteer && race.autoItems ? 'Used automatically' : ride.connected ? (ride.bound === null ? 'Press a controller button' : 'Press your item button') : 'Space = use item',
       });
     }
-    requestAnimationFrame(frame);
   }
 
   refreshLabels(); makeDemo();
   if (cfg.ftp == null) $('ftp').focus(); // the one thing we need from a new player
-  window.CritDebug = { renderer, state, cfg, trainer, ride, startRace, toMenu, showResults, onRideMessage, rideSteer };
+  window.CritDebug = { debug, tick, kb, renderer, state, cfg, trainer, ride, startRace, toMenu, showResults, onRideMessage, rideSteer };
   requestAnimationFrame(frame);
 })();

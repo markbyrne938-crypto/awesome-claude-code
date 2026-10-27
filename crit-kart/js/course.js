@@ -138,14 +138,17 @@
     const length = (N * SEG_LEN) / UNIT;
     const mod = (s) => { const t = N * SEG_LEN; return (((s * UNIT) % t) + t) % t; };
     const idx = (s) => Math.floor(mod(s) / SEG_LEN);
+    // Smooth lookups: blend linearly between segment centres so grade/bend/width never step at segment boundaries
+    // (stepped values made the bike jerk and the riders' lean flicker every 4 m).
+    const lerpAt = (arr, s) => { const f = mod(s) / SEG_LEN - 0.5, i0 = Math.floor(f), t = f - i0; return arr[(i0 + N) % N] * (1 - t) + arr[(i0 + 1 + N) % N] * t; };
     return {
       def, theme, N, segs, length, map, ys, trackLen: N * SEG_LEN, obstacles,
       segIndex: idx,
-      gradeAt(s) { return grade[idx(s)]; },
-      curveAt(s) { return deg[idx(s)]; },
-      widthAt(s) { return width[idx(s)]; },
-      wallsAt(s) { return width[idx(s)] < NARROW; },
-      elevationAt(s) { return ys[idx(s)] / UNIT; },
+      gradeAt(s) { return lerpAt(grade, s); },
+      curveAt(s) { return lerpAt(deg, s); },
+      widthAt(s) { return lerpAt(width, s); },
+      wallsAt(s) { return lerpAt(width, s) < NARROW; },
+      elevationAt(s) { const z = mod(s), i = Math.floor(z / SEG_LEN); return (ys[i] + (z / SEG_LEN - i) * (ys[i + 1] - ys[i])) / UNIT; },
       // item box rows (metres along the lap)
       boxRows: [0.16, 0.4, 0.64, 0.88].map((f) => f * length),
     };

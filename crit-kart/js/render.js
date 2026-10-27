@@ -78,8 +78,10 @@
     ctx.save(); ctx.translate(x, y);
     const sg = ctx.createRadialGradient(0, 0, u * 0.04, 0, 0, u * 0.46); sg.addColorStop(0, 'rgba(0,0,0,.42)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = sg; ellipse(ctx, 0, u * 0.01, u * 0.46, u * 0.1); ctx.fill();
+    const strokeAmt = Math.min(1, r.rpm / 70) * (0.5 + 0.5 * Math.min(1, r.pw / 250)); // harder pedalling rocks the bike more
+    ctx.translate(0, -Math.abs(Math.sin(r.phase)) * u * 0.006 * strokeAmt);
     ctx.transform(1, 0, (r.yaw || 0) * 0.14, 0.95, 0, 0); // looking down from behind: slight foreshortening + turn-in shear
-    ctx.rotate(r.lean * 0.2 + (r.stun > 0 ? Math.sin(time * 18) * 0.3 : 0) + (r.wobble > 0 ? Math.sin(time * 40) * 0.1 * Math.min(1, r.wobble / 0.5) : 0));
+    ctx.rotate(r.lean * 0.2 + Math.sin(r.phase) * 0.022 * strokeAmt + (r.stun > 0 ? Math.sin(time * 18) * 0.3 : 0) + (r.wobble > 0 ? Math.sin(time * 40) * 0.1 * Math.min(1, r.wobble / 0.5) : 0));
     ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.lineWidth = ew; ctx.strokeStyle = edge;
     const sway = Math.sin(r.phase) * u * 0.012;
 
@@ -300,7 +302,7 @@
       const mod = (z) => ((z % T) + T) % T;
       const camZ = mod(p.s * UNIT - CAM_BACK);
       const baseI = Math.floor(camZ / SEG_LEN), base = segs[baseI], pct = (camZ % SEG_LEN) / SEG_LEN;
-      const shake = p.hop > 0 ? Math.sin(this.t * 70) * 22 * (p.hop / 0.35) : 0;
+      const shake = p.hop > 0 ? Math.sin(this.t * 30) * 16 * Math.sin(Math.PI * (1 - p.hop / 0.35)) : 0; // eases in and out with the hop
       const camY = lerp(base.y1, base.y2, pct) + CAM_H + shake;
       const camX = p.x * ROAD_W * 0.8 * track.widthAt(p.s);
       let dx = -(base.curve * pct), x = 0, maxy = H;
@@ -345,7 +347,7 @@
       for (const b of race.boxes) if (b.active) put(b.s, { kind: 'box', off: b.x, b });
       for (const h of race.hazards) put(h.s, { kind: 'banana', off: h.x });
       for (const pr of race.projectiles) put(pr.s, { kind: 'proj', off: pr.x, pr });
-      this.stats = { riders: 0 };
+      this.stats = { riders: 0, sprites: {} };
       for (const r of race.riders) put(r.s, { kind: 'rider', off: r.x, r });
 
       const tagged = new Set(race.riders.filter((o) => !o.isPlayer && o.s - p.s > 3 && o.s - p.s < 90).sort((a, b) => a.s - b.s).slice(0, 3));
@@ -357,15 +359,20 @@
         const clip = Math.min(H, seg.clip);
         ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, clip + (clip < H ? 2 : 0)); ctx.clip();
         if (seg.walls) this.drawWalls(seg, a, b, th);
+        const fogA = clamp(1 - (n / DRAW) * (n / DRAW) * 1.1, 0, 1);
         for (const sp of list || []) {
-          const sc = lerp(a.scale, b.scale, sp.pct), pu = (sc * W) / 2, wf = lerp(seg.w1, seg.w2, sp.pct);
-          const sx = lerp(a.x, b.x, sp.pct) + sc * sp.off * ROAD_W * wf * W / 2, sy = lerp(a.y, b.y, sp.pct), hw = sc * ROAD_W * wf * W / 2;
+          ctx.globalAlpha = fogA;
+          // Project the sprite's own world position exactly (camera-relative z/x/y interpolated along the road polyline), instead of
+          // interpolating the segment's screen points: the latter is wrong close to the camera and made nearby riders breathe and bob.
+          const c1 = seg.p1.camera, c2 = seg.p2.camera, zc = lerp(c1.z, c2.z, sp.pct), xc = lerp(c1.x, c2.x, sp.pct), yc = lerp(c1.y, c2.y, sp.pct);
+          const sc = DEPTH / zc, pu = (sc * W) / 2, wf = lerp(seg.w1, seg.w2, sp.pct);
+          const sx = W / 2 + sc * (xc + sp.off * ROAD_W * wf) * W / 2, sy = this.horizon - sc * yc * H / 2, hw = sc * ROAD_W * wf * W / 2;
           if (sp.kind === 'scenery') drawScenery(ctx, sp.sc, sx, sy, pu);
           else if (sp.kind === 'obstacle') drawObstacle(ctx, sp.o, sx, sy, pu, hw);
           else if (sp.kind === 'rider') {
-            const r = sp.r; r.yaw = clamp(track.curveAt(r.s) / 6, -1, 1) * 0.8 + r.lean * 0.25; const hopY = r.hop > 0 ? Math.sin(Math.PI * (1 - r.hop / 0.35)) * pu * 40 : 0;
+            const r = sp.r; this.stats.sprites[r.name] = { sx, sy, w: pu * RW }; r.yaw = clamp(track.curveAt(r.s) / 6, -1, 1) * 0.8 + r.lean * 0.25; const hopY = r.hop > 0 ? Math.sin(Math.PI * (1 - r.hop / 0.35)) * pu * 40 : 0;
             const dz = seg.p1.camera.z + sp.pct * SEG_LEN, fade = r.isPlayer ? 1 : clamp((dz - 390) / 90, 0, 1) * r.ghost; // short fade as a rival slips behind the camera; riders level with you stay solid
-            if (fade > 0.02) { ctx.globalAlpha = fade; drawRider(ctx, sx, sy - hopY, pu * RW, r, this.t); ctx.globalAlpha = 1; this.stats.riders++; }
+            if (fade > 0.02) { ctx.globalAlpha = fade * fogA; drawRider(ctx, sx, sy - hopY, pu * RW, r, this.t); ctx.globalAlpha = fogA; this.stats.riders++; }
             if (pu * RW > 28 && (r.isPlayer || tagged.has(r))) {
               const sz = clamp(pu * RW * 0.2, 10, 20);
               if (r.isPlayer) { ctx.save(); ctx.translate(sx, sy - pu * RW * 1.5); ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(15,15,30,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-sz * 0.6, -sz * 0.6); ctx.lineTo(sz * 0.6, -sz * 0.6); ctx.lineTo(0, sz * 0.4); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }

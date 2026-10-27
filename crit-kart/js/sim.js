@@ -38,7 +38,7 @@
       this.s = 0; this.x = 0; this.v = 0; this.power = 0; this.pw = 0; this.steer = 0; this.lean = 0;
       this.item = null; this.stun = 0; this.boost = 0; this.shield = 0; this.invuln = 0; this.draft = 0;
       this.finished = false; this.finishTime = null; this.lap = 1; this.phase = Math.random() * 6; this.grade = 0;
-      this.ghost = 1; this.pSum = 0; this.pT = 0; this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
+      this.vx = 0; this.pend = 0; this.rpm = 0; this.cadence = 0; this.cadF = 0.94 + Math.random() * 0.12; this.ghost = 1; this.pSum = 0; this.pT = 0; this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
       this.ai = null;
     }
   }
@@ -81,8 +81,8 @@
       if (this.state === 'countdown' && this.time >= 0) { this.state = 'racing'; this.emit('go', {}); }
       const racing = this.state !== 'countdown';
       const p = this.player;
-      p.power = input.power;
-      p.steer = this.autoSteer ? this.autoSteerFor(p) : input.steer;
+      p.power = input.power; p.cadence = input.cadence || 0;
+      p.steer = this.autoSteer ? this.autoSteerFor(p, dt) : input.steer;
 
       for (const r of this.riders) {
         if (!r.isPlayer) this.updateAI(r, dt);
@@ -127,20 +127,25 @@
       const F = (P * EFF) / Math.max(r.v, 1.2)
         - (m * G * ((CRR + off) * Math.cos(theta) + Math.sin(theta)) + 0.5 * RHO * cda * r.v * r.v + brake);
       r.v = Math.max(0, r.v + (F / m) * dt);
+      if (r.pend > 0) { const take = r.pend * Math.min(1, dt * 7); r.v = Math.max(0, r.v - take); r.pend -= take; } // impacts bleed speed over ~0.2 s instead of cutting it
       r.s += r.v * dt;
-      r.phase += r.v * dt * 1.3 + (r.pw > 20 ? dt * 3 : 0);
+      const rpmT = r.pw < 15 || r.v < 0.5 ? 0 : (r.cadence > 0 ? r.cadence : clamp((58 + r.pw * 0.14 + r.v * 1.2) * r.cadF, 50, 105));
+      r.rpm += (rpmT - r.rpm) * Math.min(1, dt * 3);
+      r.phase += (r.rpm / 60) * Math.PI * 2 * dt;
 
       // lateral
       const k = Math.min(1, r.v / 4);
       const w = this.track.widthAt(r.s), walled = this.track.wallsAt(r.s);
       const push = this.track.curveAt(r.s) * 0.045 * Math.pow(r.v / 10, 2);
-      r.x += ((r.steer * 0.9 * k - push) / w) * dt; // narrower road = same sideways speed in metres, more in road fractions
+      // lateral motion has inertia: the bike leans in first, then moves over (response time ~0.18 s), rather than snapping sideways
+      r.vx += ((r.steer * 0.9 * k) / w - r.vx) * Math.min(1, dt * 5.5);
+      r.x += (r.vx - push / w) * dt;
       r.scrape = Math.max(0, r.scrape - dt);
       if (walled) {
         const lim = 0.97;
-        if (Math.abs(r.x) > lim) { r.x = clamp(r.x, -lim, lim); r.v = Math.max(0, r.v - 6 * dt); r.scrape = 0.25; } // grinding along the barrier
+        if (Math.abs(r.x) > lim) { if (r.x * r.vx > 0) r.vx = 0; r.x = clamp(r.x, -lim, lim); r.v = Math.max(0, r.v - 6 * dt); r.scrape = 0.25; } // grinding along the barrier
       } else r.x = clamp(r.x, -1.3, 1.3);
-      r.lean += (clamp(r.steer, -1, 1) - r.lean) * Math.min(1, dt * 6);
+      r.lean += (clamp(r.vx, -1, 1) - r.lean) * Math.min(1, dt * 6);
 
       // No rider-to-rider collisions (as in Zwift): riders pass straight through each other.
       // Overlapping rivals turn slightly see-through so a crowded start or a pass stays readable.
@@ -166,13 +171,13 @@
     hitObstacle(r, o) {
       const kind = o.type;
       if (kind === 'bump') {
-        r.v *= clamp(1 - 0.05 - r.v * 0.006, 0.78, 0.95); r.hop = 0.35;
+        r.pend += r.v * (1 - clamp(1 - 0.05 - r.v * 0.006, 0.78, 0.95)); r.hop = 0.35;
         this.emit('obstacle', { rider: r, kind });
       } else if (kind === 'cone') {
-        r.v *= 0.65; r.wobble = 0.7; o.down = true; o.downT = this.time;
+        r.pend += r.v * 0.35; r.wobble = 0.7; o.down = true; o.downT = this.time;
         this.emit('obstacle', { rider: r, kind });
       } else if (kind === 'pothole') {
-        r.v *= 0.78; r.wobble = 0.5; r.hop = 0.2;
+        r.pend += r.v * 0.22; r.wobble = 0.5; r.hop = 0.2;
         this.emit('obstacle', { rider: r, kind });
       } else if (kind === 'barrel') {
         o.down = true; o.downT = this.time;
@@ -315,7 +320,8 @@
       }
       const lim = this.track.wallsAt(r.s) ? 0.78 : 1.1;
       tx = clamp(tx, -lim, lim);
-      r.steer = clamp((tx - r.x) * 3, -1, 1);
+      a.txs = a.txs === undefined ? tx : a.txs + (tx - a.txs) * Math.min(1, dt * 3.5); // ease lane changes
+      r.steer = clamp((a.txs - r.x) * 3, -1, 1);
 
       if (r.item) this.autoUseItem(r, dt, a);
     }
@@ -334,7 +340,7 @@
     // Steering for a rider who can't steer. Sit in the wheel of the rider ahead (that's where the draft is); if we're going
     // faster than them, pull out to the freer side and pass, then pick up the next wheel. Always dodge obstacles and grab
     // boxes that don't cost us the draft.
-    autoSteerFor(r) {
+    autoSteerFor(r, dt = 1 / 60) {
       const L = this.length, lim = this.track.wallsAt(r.s) ? 0.75 : 0.95, st = r._auto || (r._auto = { ot: null });
       // the wheel to follow: close ahead AND close to our line (a rider two lanes over is no use for the draft)
       let lead = st.lead && !st.lead.finished && st.lead.s - r.s > 0.3 && st.lead.s - r.s < 30 ? st.lead : null, bd = lead ? lead.s - r.s : 30, bestScore = lead ? bd + 14 * Math.abs(lead.x - r.x) - 4 : 1e9; // sticky: keep the current leader unless a clearly better one appears
@@ -368,7 +374,8 @@
         if (d > 0 && d < 26 && Math.abs(o.x - r.x) < 0.3) { tx = o.x + (o.x > r.x || (o.x === r.x && o.x > 0) ? -0.5 : 0.5); break; }
       }
       tx = clamp(tx, -lim, lim);
-      return clamp((tx - r.x) * 3.2, -1, 1);
+      st.txs = st.txs === undefined ? tx : st.txs + (tx - st.txs) * Math.min(1, dt * 3.5);
+      return clamp((st.txs - r.x) * 3.2, -1, 1);
     }
 
     results() {
