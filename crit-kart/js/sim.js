@@ -133,7 +133,11 @@
       }
       if (r.isPlayer) {
         const lapNow = Math.floor(Math.max(0, r.s) / this.length);
-        if (lapNow !== r._lapSeen) { if (r._lapSeen !== undefined && lapNow > 0 && lapNow < this.laps) this.emit('lap', { lap: lapNow + 1 }); r._lapSeen = lapNow; }
+        if (r._lapSeen === undefined) { r._lapSeen = lapNow; r._lapStart = 0; }
+        else if (lapNow > r._lapSeen && lapNow > 0) {
+          this.emit('lap', { lap: Math.min(lapNow + 1, this.laps), lapTime: this.time - r._lapStart, final: lapNow >= this.laps });
+          r._lapSeen = lapNow; r._lapStart = this.time;
+        }
       }
     }
 

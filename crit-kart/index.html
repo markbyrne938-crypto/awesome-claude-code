@@ -8,10 +8,10 @@
   :root { --ink:#1b1b2f; --pink:#ff5fa2; --yellow:#ffd43b; --blue:#4dabf7; --card:#fffdf5; }
   * { box-sizing: border-box; }
   html, body { margin:0; height:100%; overflow:hidden; background:#9be3ff; font-family:"Trebuchet MS","Arial Rounded MT Bold",system-ui,sans-serif; color:var(--ink); }
-  canvas { position:fixed; inset:0; display:block; }
-  .overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; padding:16px; overflow:auto; background:rgba(20,20,50,.35); }
+  canvas#game { position:fixed; inset:0; display:block; }
+  .overlay { position:fixed; inset:0; display:flex; padding:16px; overflow:auto; background:rgba(20,20,50,.35); }
   .overlay[hidden], [hidden] { display:none !important; }
-  .card { background:var(--card); border:5px solid var(--ink); border-radius:26px; box-shadow:0 8px 0 var(--ink); padding:22px 26px; width:min(920px,100%); max-height:100%; overflow:auto; }
+  .card { margin:auto; background:var(--card); border:5px solid var(--ink); border-radius:26px; box-shadow:0 8px 0 var(--ink); padding:22px 26px; width:min(920px,100%); }
   h1 { margin:0 0 2px; font-size:clamp(34px,6vw,58px); letter-spacing:1px; color:var(--pink); -webkit-text-stroke:3px var(--ink); paint-order:stroke fill; text-shadow:0 4px 0 var(--ink); }
   .sub { margin:0 0 14px; font-weight:700; opacity:.8; }
   .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:14px; }
@@ -36,6 +36,20 @@
   td { padding:6px 8px; border-bottom:2px dashed #ccc; } tr.me td { background:#ffe3f0; }
   td i { display:inline-block; width:14px; height:14px; border-radius:50%; border:2px solid var(--ink); margin-right:8px; vertical-align:-2px; }
   .start { text-align:center; margin-top:16px; }
+  .live { margin-top:10px; font-size:12px; font-weight:700; background:#101028; color:#c9d1ff; border-radius:12px; padding:8px 10px; }
+  .live b { color:#9affc2; }
+  .steerbar { position:relative; height:14px; border-radius:7px; background:#2a2f5a; margin:6px 0; overflow:hidden; }
+  .steerbar i { position:absolute; top:0; bottom:0; width:8px; margin-left:-4px; left:50%; background:var(--yellow); border-radius:4px; }
+  .steerbar::after { content:''; position:absolute; left:50%; top:0; bottom:0; width:2px; background:#ffffff55; }
+  .chk { display:flex; gap:8px; align-items:center; font-weight:700; font-size:14px; margin-top:8px; }
+  .chk input { width:18px; height:18px; accent-color:var(--pink); }
+  canvas#powerChart { width:100%; height:72px; display:block; border:3px solid var(--ink); border-radius:12px; background:#fff; }
+  .stats { display:flex; gap:10px; flex-wrap:wrap; margin:8px 0; }
+  .stat { flex:1; min-width:90px; border:3px solid var(--ink); border-radius:12px; padding:6px 8px; background:#fff; text-align:center; }
+  .stat b { display:block; font-size:20px; } .stat span { font-size:11px; opacity:.7; }
+  h3 { margin:8px 0 2px; font-size:16px; }
+  #results .card { padding:14px 22px; } #results td { padding:3px 8px; font-size:14px; } #results h1 { margin-bottom:4px; }
+  .pts { text-align:right; } .trophy { font-size:28px; }
 </style>
 </head>
 <body>
@@ -59,12 +73,21 @@
         <div class="row"><button id="btnRide">Connect controls</button><button id="btnCal" class="alt">Calibrate steering</button></div>
         <div class="row"><button id="btnBind" class="alt">Bind item button</button><button id="btnUnbind" class="alt">Any button</button></div>
         <div id="rideStatus" class="status"></div>
+        <div class="live" id="rideLive">
+          <div>Controller test — move the bars and press buttons:</div>
+          <div class="steerbar"><i id="steerDot"></i></div>
+          <div>Buttons: <b id="liveBtns">–</b></div>
+          <div>Analog: <b id="liveAnalog">–</b></div>
+          <div>Messages: <b id="liveCount">0</b> · steering <b id="liveCal">not calibrated</b></div>
+        </div>
       </div>
       <div class="box">
         <h2>Race</h2>
         <label for="course">Course</label><select id="course"></select>
         <div id="courseBlurb" class="sub" style="font-size:13px;margin:6px 0 0"></div>
         <label for="laps">Laps: <span id="lapsVal"></span></label><input id="laps" type="range" min="2" max="16" step="1">
+        <label for="mode">Mode</label>
+        <select id="mode"><option value="single">Single race</option><option value="champ">Championship (all 3 courses, points)</option></select>
       </div>
       <div class="box">
         <h2>You</h2>
@@ -72,26 +95,39 @@
         <label for="weight">Rider weight (kg)</label><input id="weight" type="number" min="35" max="140">
         <label for="difficulty">Rival strength: <span id="diffVal"></span></label><input id="difficulty" type="range" min="0.75" max="1.25" step="0.05">
         <label for="gradeFeel">Trainer hill feel: <span id="feelVal"></span></label><input id="gradeFeel" type="range" min="0" max="1" step="0.1">
-        <label><input id="invert" type="checkbox"> Invert steering</label>
+        <label for="sens">Steering sensitivity: <span id="sensVal"></span></label><input id="sens" type="range" min="0.5" max="2" step="0.1">
+        <label class="chk"><input id="invert" type="checkbox"> Invert steering</label>
+        <label class="chk"><input id="sound" type="checkbox"> Sound effects</label>
       </div>
       <div class="box keys">
         <h2>Keyboard (no trainer)</h2>
         <kbd>↑</kbd>/<kbd>↓</kbd> raise / lower watts · <kbd>←</kbd>/<kbd>→</kbd> steer<br>
         <kbd>Space</kbd> use item · <kbd>Esc</kbd> pause<br>
+        <kbd>M</kbd> mute · <kbd>F</kbd> fullscreen<br>
         Draft behind riders to save watts, grab <b>?</b> boxes, and use items wisely.
       </div>
     </div>
     <div class="start"><button id="btnStart" class="go">START RACE</button></div>
-    <details><summary>Bluetooth debug log</summary><pre id="log"></pre></details>
+    <details><summary>Bluetooth debug log</summary><div class="row"><button id="btnCopyLog" class="alt">Copy log</button><button id="btnClearLog" class="alt">Clear</button><button id="btnFull" class="alt">Fullscreen</button></div><pre id="log"></pre></details>
   </div>
 </div>
 
 <div id="results" class="overlay" hidden>
-  <div class="card" style="width:min(560px,100%)">
-    <h1 style="font-size:40px">RESULTS</h1>
+  <div class="card" style="width:min(640px,100%)">
+    <h1 style="font-size:40px" id="resultsTitle">RESULTS</h1>
     <table><tbody id="resultsBody"></tbody></table>
-    <div id="resultsStats" class="sub"></div>
-    <div class="row" style="justify-content:center"><button id="btnAgain" class="go" style="font-size:20px">Race again</button><button id="btnMenu" class="alt">Menu</button></div>
+    <div class="stats" id="resultsStats"></div>
+    <canvas id="powerChart" width="600" height="96"></canvas>
+    <div id="champBox" hidden><h3 id="champTitle">Championship standings</h3><table><tbody id="champBody"></tbody></table></div>
+    <div class="row" style="justify-content:center"><button id="btnNext" class="go" style="font-size:20px" hidden>Next race</button><button id="btnAgain" class="go" style="font-size:20px">Race again</button><button id="btnMenu" class="alt">Menu</button></div>
+  </div>
+</div>
+
+<div id="pause" class="overlay" hidden>
+  <div class="card" style="width:min(420px,100%);text-align:center">
+    <h1 style="font-size:40px">PAUSED</h1>
+    <p id="pauseMsg" class="sub"></p>
+    <div class="row" style="justify-content:center"><button id="btnResume" class="go" style="font-size:20px">Resume</button><button id="btnRestart" class="alt">Restart</button><button id="btnQuit" class="alt">Quit to menu</button></div>
   </div>
 </div>
 <div id="hudbar" hidden></div>
@@ -100,6 +136,7 @@
 <script src="js/course.js"></script>
 <script src="js/sim.js"></script>
 <script src="js/render.js"></script>
+<script src="js/audio.js"></script>
 <script src="js/main.js"></script>
 </body>
 </html>

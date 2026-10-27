@@ -301,6 +301,16 @@
       text(ctx, `${gp > 0.5 ? '▲' : gp < -0.5 ? '▼' : '►'} ${Math.abs(gp).toFixed(1)}%`, px + S(150), py + ph + S(22), S(22), gcol);
       if (p.draft > 0.15) text(ctx, `DRAFTING -${Math.round(38 * p.draft)}% drag`, px + S(16), py + ph + S(50), S(16), '#8cffb0');
 
+      // connection chips
+      let cx = px;
+      for (const chip of hud.chips || []) {
+        ctx.font = `800 ${S(13)}px ${FONT}`; const w = ctx.measureText(chip.label).width + S(22);
+        rrect(ctx, cx, py + ph + S(66), w, S(24), S(12)); ctx.fillStyle = chip.state === 'ok' ? '#51cf66' : chip.state === 'bad' ? '#ff6b6b' : 'rgba(255,255,255,.75)'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = INK; ctx.stroke();
+        text(ctx, chip.label, cx + w / 2, py + ph + S(78), S(13), chip.state === 'off' ? INK : '#fff', 'center', chip.state === 'off' ? 'rgba(0,0,0,0)' : INK);
+        cx += w + S(6);
+      }
+      if (hud.warning) text(ctx, hud.warning, W / 2, H * 0.34, S(30), '#ff8787', 'center');
+
       // race info (top right)
       const order = race.sorted(), place = order.indexOf(p) + 1;
       const rx = W - S(236), rw = S(220);

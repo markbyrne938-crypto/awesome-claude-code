@@ -114,6 +114,18 @@
       });
       this.device = dev;
       dev.addEventListener('gattserverdisconnected', () => { this.canControl = false; this.cb.onStatus('Trainer disconnected'); this.cb.onDisconnect && this.cb.onDisconnect(); });
+      await this.attach();
+    }
+
+    // Re-open the GATT connection to the already-chosen device (no chooser needed).
+    async reconnect() {
+      if (!this.device) throw new Error('No trainer selected yet');
+      this.lastGrade = null; this.lastCrank = null;
+      await this.attach();
+    }
+
+    async attach() {
+      const dev = this.device;
       const server = await dev.gatt.connect();
       let mode = null;
       try {
@@ -194,7 +206,7 @@
         optionalServices: [UUID.ZWIFT_RIDE],
       });
       this.device = dev;
-      dev.addEventListener('gattserverdisconnected', () => this.cb.onStatus('Controller disconnected'));
+      dev.addEventListener('gattserverdisconnected', () => { this.cb.onStatus('Controller disconnected'); this.cb.onDisconnect && this.cb.onDisconnect(); });
       const server = await dev.gatt.connect();
       const svc = await server.getPrimaryService(UUID.ZWIFT_RIDE);
       const chars = {};
@@ -204,18 +216,29 @@
       const onNotify = (name) => (e) => {
         const u8 = new Uint8Array(e.target.value.buffer.slice(e.target.value.byteOffset, e.target.value.byteOffset + e.target.value.byteLength));
         this.cb.onRaw(`${name}: ${hex(u8)}`);
-        if (name === 'async') this.cb.onMessage(decodeZwiftMessage(u8));
+        if (name === 'async') { this.gotAsync = true; this.cb.onMessage(decodeZwiftMessage(u8)); }
       };
       for (const k of ['async', 'tx']) {
         if (!chars[k]) continue;
         chars[k].addEventListener('characteristicvaluechanged', onNotify(k));
         try { await chars[k].startNotifications(); } catch (e) { this.cb.onRaw(`notify ${k} failed: ${e.message}`); }
       }
-      // Handshake: the device stays quiet until it receives "RideOn".
-      if (chars.rx) {
-        const rideOn = new Uint8Array([0x52, 0x69, 0x64, 0x65, 0x4f, 0x6e]);
-        if (chars.rx.writeValueWithResponse) await chars.rx.writeValueWithResponse(rideOn); else await chars.rx.writeValue(rideOn);
-      }
+      // Handshake: the device stays quiet until it receives "RideOn". Some firmwares want extra bytes after it,
+      // so if nothing arrives we retry with the variants seen in the wild and say so in the log.
+      const write = async (bytes) => {
+        if (!chars.rx) return;
+        const u8 = new Uint8Array(bytes);
+        try { if (chars.rx.writeValueWithResponse) await chars.rx.writeValueWithResponse(u8); else await chars.rx.writeValue(u8); }
+        catch (e) { this.cb.onRaw(`handshake write failed: ${e.message}`); }
+      };
+      const rideOn = [0x52, 0x69, 0x64, 0x65, 0x4f, 0x6e];
+      this.gotAsync = false;
+      await write(rideOn);
+      const variants = [[...rideOn, 0x01, 0x02], [...rideOn, 0x01, 0x04]];
+      variants.forEach((v, i) => setTimeout(() => {
+        if (this.gotAsync || !dev.gatt.connected) return;
+        this.cb.onRaw(`no data yet, retrying handshake variant ${i + 1}`); write(v);
+      }, 2500 * (i + 1)));
       this.cb.onStatus(`${dev.name || 'Zwift controller'} connected`);
     }
 

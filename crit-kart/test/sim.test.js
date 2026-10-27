@@ -26,15 +26,16 @@ for (const def of C.COURSES) {
   const track = C.buildTrack(def);
   assert.ok(Math.abs(track.ys[track.N]) < 1e-6, 'elevation loop closes');
   const race = new C.Race({ track, laps: 12, mass: 84, pace: 230, difficulty: 1 });
-  let t = 0, pT = null;
+  let t = 0, pT = null, laps = [];
   while (race.state !== 'finished' && t < 1500) {
     race.update(1 / 30, { power: 250, steer: Math.max(-1, Math.min(1, -race.player.x * 3)), use: false }); t += 1 / 30;
     if (race.player.finished && pT === null) pT = race.time;
-    for (const e of race.events) { /* drain */ } race.events.length = 0;
+    for (const e of race.events) if (e.type === 'lap') laps.push(e); race.events.length = 0;
     for (const r of race.riders) assert.ok(Number.isFinite(r.s) && Number.isFinite(r.v) && Math.abs(r.x) <= 1.3 + 1e-9);
   }
   const res = race.results();
   console.log(`${def.id}: lap ${track.length.toFixed(0)} m, player 12 laps in ${(pT / 60).toFixed(1)} min, place ${res.find(r => r.isPlayer).place}, hazards ${race.hazards.length}`);
+  assert.strictEqual(laps.length, 12, 'one lap event per completed lap'); assert.ok(laps.slice(0, 11).every((l) => l.lapTime > 20 && !l.final) && laps[11].final);
   assert.ok(pT > 8 * 60 && pT < 14 * 60, 'race length ~10 min');
 }
 console.log('all ok');
