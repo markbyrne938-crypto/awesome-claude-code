@@ -270,7 +270,12 @@
     toast(on ? 'Steering off: auto-follow' : 'Steering on', '#fff', 1.6); refreshLabels();
   }
   // click / tap anywhere on the race view to use the held item (handy on touch screens and with no keyboard)
-  $('game').addEventListener('pointerdown', () => { if (state.mode === 'race' && !state.paused && !state.resultsShown) ride.use = true; });
+  $('game').addEventListener('pointerdown', (e) => {
+    if (state.mode !== 'race' || state.paused || state.resultsShown) return;
+    const r = renderer.pauseRect(), px = e.clientX, py = e.clientY;
+    if (px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) { pauseGame(''); return; } // the pause button
+    ride.use = true;
+  });
 
   function pauseGame(msg) { if (state.mode !== 'race') return; state.paused = true; state.pauseMsg = msg || ''; }
   function resumeGame() { state.paused = false; state.pauseMsg = ''; ride.use = false; }

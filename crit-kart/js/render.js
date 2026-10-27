@@ -575,6 +575,9 @@
     }
 
     // ---- HUD ----
+    // on-screen pause button (touch screens have no Esc key); bottom-right, kept clear of the elevation strip
+    pauseRect() { const S = (v) => v * this.ui, sz = S(54); return { x: this.W - sz - S(16), y: this.H - sz - S(16), w: sz, h: sz }; }
+
     drawHUD(race, hud) {
       const { ctx, W, H, ui } = this, p = race.player, tr = race.track;
       const S = (v) => v * ui;
@@ -702,6 +705,10 @@
         const label0 = near && (!narrowSoon || bd < 30) ? { bump: 'SPEED BUMPS', cone: 'CONES: WEAVE!', pothole: 'POTHOLES', barrel: 'BARRELS: FIND THE GAP' }[near.type] + ` ${Math.round(bd)} m` : narrowSoon ? 'NARROW ROAD: KEEP OFF THE WALLS' : null;
         const label = vlabel || label0;
         if (label) text(ctx, '⚠ ' + label, W / 2, ey - S(54), S(20), '#ffe066', 'center'); }
+
+      // pause button
+      { const r = this.pauseRect(); ctx.save(); rrect(ctx, r.x, r.y, r.w, r.h, S(14)); ctx.fillStyle = 'rgba(255,253,245,.88)'; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke();
+        ctx.fillStyle = INK; ctx.fillRect(r.x + r.w * 0.33, r.y + r.h * 0.26, r.w * 0.12, r.h * 0.48); ctx.fillRect(r.x + r.w * 0.55, r.y + r.h * 0.26, r.w * 0.12, r.h * 0.48); ctx.restore(); }
 
       // toasts
       let ty = H * 0.25;

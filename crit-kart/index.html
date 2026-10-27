@@ -56,6 +56,7 @@
   .badge[hidden] { display:none; }
   .preview { margin-top:10px; padding:10px 12px; border-radius:12px; background:#fff9db; border:3px solid var(--ink); font-size:14px; font-weight:700; line-height:1.45; }
   .preview small { display:block; font-weight:600; opacity:.8; }
+  #rotateHint { display:none; } @media (orientation:portrait) and (max-width:700px) { #rotateHint { display:block; } }
   .warn { background:#fff3bf; border:3px solid var(--ink); border-radius:12px; padding:8px 12px; font-weight:700; margin-bottom:12px; font-size:14px; }
   kbd { background:#fff; border:2px solid var(--ink); border-radius:6px; padding:0 6px; font-weight:800; }
   details { margin-top:10px; } summary { cursor:pointer; font-weight:800; min-height:32px; display:flex; align-items:center; }
@@ -96,6 +97,7 @@
   <div class="card menu-card">
     <h1>CRIT KART</h1>
     <p class="sub">Power-meter pedal racing. Your watts drive the bike, steer for item boxes, bomb your rivals.</p>
+    <div id="rotateHint" class="warn">Tip: turn your phone sideways (landscape) for the best view.</div>
     <div id="bleWarn" class="warn" hidden>This browser has no Web Bluetooth. Use Chrome or Edge (desktop / Android) to connect a trainer. You can still play with the keyboard.</div>
 
     <div class="cols">
