@@ -26,10 +26,41 @@
     ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
+  let TEXT_STROKE = true; // set by the quality preset
   function text(ctx, str, x, y, size, fill, align = 'left', stroke = INK) {
     ctx.font = `800 ${size}px ${FONT}`; ctx.textAlign = align; ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, size * 0.18); ctx.strokeStyle = stroke; ctx.strokeText(str, x, y);
+    if (TEXT_STROKE || size > 40) { ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, size * 0.18); ctx.strokeStyle = stroke; ctx.strokeText(str, x, y); }
+    else { ctx.fillStyle = stroke; ctx.fillText(str, x + 1.5, y + 1.5); } // cheap drop shadow instead of an outline
     ctx.fillStyle = fill; ctx.fillText(str, x, y);
+  }
+
+  // Quality presets. dpr = canvas resolution scale (1 = CSS pixels), drawMax = road segments drawn, lite = simplified riders.
+  const PRESETS = {
+    high: { dpr: () => Math.min(2, window.devicePixelRatio || 1), drawMax: 130, sceneryStep: 1, lite: false, fx: true, hills: 2, textStroke: true, fps: 60 },
+    med: { dpr: () => 1, drawMax: 90, sceneryStep: 1, lite: false, fx: false, hills: 2, textStroke: true, fps: 30 },
+    low: { dpr: () => 0.75, drawMax: 60, sceneryStep: 2, lite: true, fx: false, hills: 1, textStroke: false, fps: 30 },
+  };
+  // A soft ground shadow drawn from a cached sprite instead of building a gradient for every rider every frame.
+  let shadowSprite = null;
+  function getShadow() {
+    if (shadowSprite) return shadowSprite;
+    const c = document.createElement('canvas'); c.width = 96; c.height = 24; const g = c.getContext('2d');
+    g.translate(48, 12); g.scale(1, 0.25); const gr = g.createRadialGradient(0, 0, 4, 0, 0, 46); gr.addColorStop(0, 'rgba(0,0,0,.45)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 46, 0, Math.PI * 2); g.fill();
+    return (shadowSprite = c);
+  }
+  // Few-path rider for weak devices (about a dozen shapes instead of ~80)
+  function drawRiderLite(ctx, x, y, u, r, time) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.drawImage(getShadow(), -u * 0.5, -u * 0.06, u, u * 0.25);
+    ctx.rotate(r.lean * 0.2 + (r.stun > 0 ? Math.sin(time * 18) * 0.3 : 0));
+    ctx.fillStyle = '#15151d'; ellipse(ctx, 0, -u * 0.33, u * 0.05, u * 0.33); ctx.fill();
+    const a = Math.sin(r.phase) * u * 0.09; ctx.lineCap = 'round'; ctx.strokeStyle = '#1b1e2a'; ctx.lineWidth = u * 0.11;
+    ctx.beginPath(); ctx.moveTo(-u * 0.07, -u * 0.65); ctx.lineTo(-u * 0.12, -u * 0.27 + a); ctx.moveTo(u * 0.07, -u * 0.65); ctx.lineTo(u * 0.12, -u * 0.27 - a); ctx.stroke();
+    ctx.fillStyle = r.color; ellipse(ctx, 0, -u * 0.84, u * 0.2, u * 0.25); ctx.fill();
+    ctx.strokeStyle = r.color; ctx.lineWidth = u * 0.07; ctx.beginPath(); ctx.moveTo(-u * 0.18, -u * 0.95); ctx.lineTo(-u * 0.21, -u * 0.74); ctx.moveTo(u * 0.18, -u * 0.95); ctx.lineTo(u * 0.21, -u * 0.74); ctx.stroke();
+    ctx.fillStyle = '#f4f4f8'; ellipse(ctx, 0, -u * 1.12, u * 0.1, u * 0.11); ctx.fill();
+    if (r.shield > 0) { ctx.strokeStyle = 'rgba(160,230,255,.9)'; ctx.lineWidth = Math.max(1.5, u * 0.03); ellipse(ctx, 0, -u * 0.6, u * 0.7, u * 0.8); ctx.stroke(); }
+    ctx.restore();
   }
   function panel(ctx, x, y, w, h, fill = 'rgba(255,255,255,0.9)', r = 16) {
     ctx.save(); rrect(ctx, x, y, w, h, r); ctx.fillStyle = fill; ctx.fill(); ctx.lineWidth = 4; ctx.strokeStyle = INK; ctx.stroke(); ctx.restore();
@@ -72,12 +103,12 @@
     ctx.strokeStyle = color; ctx.lineWidth = w; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   }
 
-  function drawRider(ctx, x, y, w, r, time, front = false) {
+  function drawRider(ctx, x, y, w, r, time, front = false, lite = false) {
+    if (lite) return drawRiderLite(ctx, x, y, w, r, time);
     const u = w, edge = 'rgba(12,12,28,.6)', ew = Math.max(0.6, u * 0.008);
     const h = hashStr(r.name), skin = SKIN[h % 4], kit = r.color, kitDark = shade(kit, -0.4), kitLight = shade(kit, 0.4), shorts = '#1b1e2a';
     ctx.save(); ctx.translate(x, y);
-    const sg = ctx.createRadialGradient(0, 0, u * 0.04, 0, 0, u * 0.46); sg.addColorStop(0, 'rgba(0,0,0,.42)'); sg.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = sg; ellipse(ctx, 0, u * 0.01, u * 0.46, u * 0.1); ctx.fill();
+    ctx.drawImage(getShadow(), -u * 0.52, -u * 0.07, u * 1.04, u * 0.26);
     const strokeAmt = Math.min(1, r.rpm / 70) * (0.5 + 0.5 * Math.min(1, r.pw / 250)); // harder pedalling rocks the bike more
     ctx.translate(0, -Math.abs(Math.sin(r.phase)) * u * 0.006 * strokeAmt);
     ctx.transform(1, 0, (r.yaw || 0) * 0.14, 0.95, 0, 0); // looking down from behind: slight foreshortening + turn-in shear
@@ -351,17 +382,24 @@
 
   class Renderer {
     constructor(canvas, opts = {}) {
-      this.cv = canvas; this.ctx = canvas.getContext('2d'); this.bg = 0; this.pitch = 0; this.horizon = 360; this.stats = { riders: 0, sprites: {} };
+      this.cv = canvas; this.ctx = canvas.getContext('2d', opts.fixed ? undefined : { alpha: false, desynchronized: true }); this.bg = 0; this.pitch = 0; this.horizon = 360; this.stats = { riders: 0, sprites: {} };
       // camera and size settings; the rear-view mirror is a second renderer with a low, wide, backward-looking camera
       this.opts = Object.assign({ camH: CAM_H, camBack: CAM_BACK, rw: RW, depth: BASE_DEPTH, drawMax: DRAW_MAX, pitch: true, speedFov: true, mirror: false, fixed: null }, opts);
-      this.mirror = this.opts.mirror; this.resize();
+      this.mirror = this.opts.mirror; this.skyGrad = null; this.setQuality(opts.quality || 'high');
+    }
+
+    // Switch the quality preset (high / med / low). Resolution changes take effect immediately.
+    setQuality(level) {
+      this.level = PRESETS[level] ? level : 'high'; this.q = Object.assign({}, PRESETS[this.level]); this.q.dpr = this.q.dpr();
+      if (!this.opts.fixed) TEXT_STROKE = this.q.textStroke;
+      this.skyGrad = null; this.resize();
     }
 
     resize() {
       if (this.opts.fixed) { // offscreen canvas of a fixed size (the mirror)
         [this.W, this.H] = this.opts.fixed; this.cv.width = this.W; this.cv.height = this.H; this.ctx.setTransform(1, 0, 0, 1, 0, 0); this.ui = 1; return;
       }
-      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const dpr = this.q.dpr;
       this.W = window.innerWidth; this.H = window.innerHeight;
       this.cv.width = Math.floor(this.W * dpr); this.cv.height = Math.floor(this.H * dpr);
       this.cv.style.width = this.W + 'px'; this.cv.style.height = this.H + 'px';
@@ -385,19 +423,20 @@
     drawBackground(race, dt) {
       const { ctx, W, H } = this, th = race.track.theme, p = race.player;
       const hz = this.horizon;
-      const g = ctx.createLinearGradient(0, 0, 0, hz + 20); g.addColorStop(0, th.sky[0]); g.addColorStop(1, th.sky[1]);
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, hz + 20);
+      // the sky gradient is built once per theme and size, not every frame
+      const key = th.sky[0] + th.sky[1] + H; if (!this.skyGrad || this.skyKey !== key) { const g = ctx.createLinearGradient(0, 0, 0, H * 0.62); g.addColorStop(0, th.sky[0]); g.addColorStop(1, th.sky[1]); this.skyGrad = g; this.skyKey = key; }
+      ctx.fillStyle = this.skyGrad; ctx.fillRect(0, 0, W, hz + 20);
       this.bg += race.track.curveAt(p.s) * p.v * dt * 1.6;
       if (th.stars) { ctx.fillStyle = '#fff'; for (let i = 0; i < 70; i++) { const x = ((i * 977 + 13) % 1000) / 1000 * W, y = ((i * 613 + 7) % 1000) / 1000 * Math.max(10, hz - 10); ctx.globalAlpha = 0.5 + 0.5 * Math.sin(this.t * 2 + i); ctx.fillRect(x, y, 2, 2); } ctx.globalAlpha = 1; }
       ctx.fillStyle = th.sun; ctx.globalAlpha = 0.95; ellipse(ctx, W * 0.72 - this.bg * 0.05 % W, hz - H * 0.3, H * 0.09, H * 0.09); ctx.fill(); ctx.globalAlpha = 1;
       const base = hz;
       if (th.skyline) {
-        [[0.25, 0.30, 90, 0], [0.6, 0.20, 60, 1]].forEach(([sp, amp, bwid, li]) => {
+        [[0.25, 0.30, 90, 0], [0.6, 0.20, 60, 1]].slice(0, this.q.hills).forEach(([sp, amp, bwid, li]) => {
           ctx.fillStyle = th.hills[li]; ctx.strokeStyle = INK; ctx.lineWidth = 2; const off = this.bg * sp;
           for (let x = -bwid; x <= W + bwid; x += bwid) { const k = Math.floor((x + off) / bwid), hsh = Math.abs(Math.sin(k * 127.1 + li * 31.7) * 43758.5) % 1, hh = H * amp * (0.35 + 0.65 * hsh), bx = x - (((off % bwid) + bwid) % bwid); ctx.fillRect(bx, base - hh, bwid - 4, hh + 4); ctx.strokeRect(bx, base - hh, bwid - 4, hh + 4); }
         });
       } else
-      [[0.35, 0.22, 0.6], [0.9, 0.14, 1.0]].forEach(([sp, amp, wl], li) => {
+      [[0.35, 0.22, 0.6], [0.9, 0.14, 1.0]].slice(2 - this.q.hills).forEach(([sp, amp, wl], li0) => { const li = li0 + 2 - this.q.hills;
         ctx.fillStyle = th.hills[li]; ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, base + 4);
         const off = this.bg * sp;
         for (let x = 0; x <= W; x += 8) {
@@ -414,7 +453,7 @@
     render(race, dt, hud) {
       this.t = (this.t || 0) + dt;
       const { ctx, W, H } = this, track = race.track, segs = track.segs, N = track.N, T = track.trackLen, p = race.player, th = track.theme, O = this.opts;
-      const DRAW = Math.min(O.drawMax, N - O.camBack / SEG_LEN - 4 | 0); // never wrap past the camera segment
+      const DRAW = Math.min(O.drawMax, this.q.drawMax, N - O.camBack / SEG_LEN - 4 | 0); // never wrap past the camera segment
       // Camera pitch: look at the road surface ahead. Descents tilt the view down (horizon rises) so the road stays on screen
       // instead of showing mostly sky; climbs tilt up only a little.
       const slope = O.pitch ? (track.elevationAt(p.s + 35) - track.elevationAt(p.s + 5)) / 30 * C.VEXAG : 0;
@@ -502,7 +541,7 @@
           const c1 = seg.p1.camera, c2 = seg.p2.camera, zc = lerp(c1.z, c2.z, sp.pct), xc = lerp(c1.x, c2.x, sp.pct), yc = lerp(c1.y, c2.y, sp.pct);
           const sc = DEPTH / zc, pu = (sc * W) / 2, wf = lerp(seg.w1, seg.w2, sp.pct);
           const sx = W / 2 + sc * (xc + sp.off * ROAD_W * wf) * W / 2, sy = this.horizon - sc * yc * H / 2, hw = sc * ROAD_W * wf * W / 2;
-          if (sp.kind === 'scenery' && pu * 400 < 1.6) continue; // too small to see
+          if (sp.kind === 'scenery' && (pu * 400 < 1.6 || (this.q.sceneryStep > 1 && (sp.sc.type === 'post' || seg.i % this.q.sceneryStep)))) continue; // too small to see / thinned out on low quality
           if (sp.kind === 'scenery') { if (sp.sc.type === 'building') ctx.globalAlpha = fogA * clamp((n - 5) / 3, 0, 1); drawScenery(ctx, sp.sc, sx, sy, pu, O.mirror); } // very near facades fade out rather than blocking the view
           else if (sp.kind === 'obstacle') drawObstacle(ctx, sp.o, sx, sy, pu, hw);
           else if (sp.kind === 'crosswalk') drawCrosswalk(ctx, sx, sy, pu, hw);
@@ -511,7 +550,7 @@
           else if (sp.kind === 'rider') {
             const r = sp.r; this.stats.sprites[r.name] = { sx, sy, w: pu * O.rw }; r.yaw = clamp(track.curveAt(r.s) / 6, -1, 1) * 0.8 + r.lean * 0.25; const hopY = r.hop > 0 ? Math.sin(Math.PI * (1 - r.hop / 0.35)) * pu * 40 : 0;
             const dz = seg.p1.camera.z + sp.pct * SEG_LEN, fade = r.isPlayer ? 1 : clamp((dz - 390) / 90, 0, 1) * r.ghost; // short fade as a rival slips behind the camera; riders level with you stay solid
-            if (fade > 0.02) { ctx.globalAlpha = fade * fogA; drawRider(ctx, sx, sy - hopY, pu * O.rw, r, this.t, O.mirror); ctx.globalAlpha = fogA; this.stats.riders++; }
+            if (fade > 0.02) { ctx.globalAlpha = fade * fogA; drawRider(ctx, sx, sy - hopY, pu * O.rw, r, this.t, O.mirror, this.q.lite); ctx.globalAlpha = fogA; this.stats.riders++; }
             if (!O.mirror && pu * O.rw > 28 && (r.isPlayer || tagged.has(r))) { // (no name tags in the mirror: the image is flipped)
               const sz = clamp(pu * O.rw * 0.2, 10, 20);
               if (r.isPlayer) { ctx.save(); ctx.translate(sx, sy - pu * O.rw * 1.5); ctx.fillStyle = '#fff'; ctx.strokeStyle = 'rgba(15,15,30,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-sz * 0.6, -sz * 0.6); ctx.lineTo(sz * 0.6, -sz * 0.6); ctx.lineTo(0, sz * 0.4); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore(); }
@@ -544,7 +583,7 @@
         }
         ctx.restore();
       }
-      if (!hud.menu) { this.drawSpeedFx(p.v); this.drawHUD(race, hud); }
+      if (!hud.menu) { if (this.q.fx) this.drawSpeedFx(p.v); this.drawHUD(race, hud); }
     }
 
     // Streaks and a soft vignette at the screen edges; strength follows speed.
@@ -610,6 +649,7 @@
         cx += w + S(6);
       }
       if (hud.warning) text(ctx, hud.warning, W / 2, H * 0.34, S(30), '#ff8787', 'center');
+      if (hud.fps) text(ctx, hud.fps, W - S(12), H - S(14), S(14), '#d8dee9', 'right');
 
       // race info (top right)
       const order = race.sorted(), place = order.indexOf(p) + 1;

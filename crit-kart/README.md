@@ -72,6 +72,7 @@ The Zwift Ride protocol is not public and I could not check it against a device.
 * **Results**: average / normalized power, W/kg, best lap, and a per-second power chart coloured by zone against your FTP.
 * **Safety nets**: a dropped trainer pauses the race and auto-reconnects (it never silently falls back to keyboard power); the race pauses when the tab is hidden; the screen is kept awake during races; "no power signal" warning if data stalls.
 * **Feel**: sound effects (synthesized), lap times with best-lap highlight, position-change toasts, steering sensitivity and invert options.
+* **Performance / graphics quality**: *Auto* (default) starts on Medium on phones and High on desktop, watches the frame time and steps down a level (with a toast) if the device can't keep up. Medium renders at 1x resolution, 30 fps, with a shorter view distance; Low renders at 0.75x, lighter riders, fewer scenery items, no mirror. The menu backdrop is drawn about once a second instead of every frame, and frames are capped (60/30/30 fps) so 90/120 Hz screens aren't over-driven. Pick a level or turn on **Show frame rate** in Advanced settings. Measured in headless Chromium at phone size (city course): High ~25 ms, Medium ~12 ms, Low ~8 ms per frame.
 * Scenery hills are exaggerated 5x for the cartoon look; physics and the trainer use the true gradient.
 
 ## Tests

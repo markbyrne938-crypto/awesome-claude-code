@@ -13,7 +13,7 @@
   const cfg = {
     course: store.get('course', 'meadow'), laps: store.get('laps', 12), ftp: store.get('ftp', null), weight: store.get('weight', 75),
     cat: store.get('cat', 'B'), rubber: store.get('rubber', true), steer: store.get('steer', 'manual'), autoItems: store.get('autoItems', true), maxHr: store.get('maxHr', null), mirror: store.get('mirror', true), fitMap: store.get('fitMap', true), gradeFeel: store.get('gradeFeel', 0.7), invertSteer: store.get('invertSteer', false),
-    mode: store.get('mode', 'single'), sens: store.get('sens', 1), sound: store.get('sound', true),
+    mode: store.get('mode', 'single'), sens: store.get('sens', 1), sound: store.get('sound', true), quality: store.get('quality', 'auto'), showFps: store.get('showFps', false),
   };
   const state = {
     mode: 'menu', paused: false, pauseMsg: '', race: null, toasts: [], incoming: 0, resultsShown: false, finishedAt: 0, champ: null,
@@ -28,8 +28,13 @@
   const keys = {};
   const kb = { steer: 0, power: 0 };
 
-  const renderer = new C.Renderer($('game'));
-  window.addEventListener('resize', () => renderer.resize());
+  // graphics quality: Auto starts at Medium on phones/tablets (High on desktop) and steps down if the device can't keep up
+  const isMobile = !!(navigator.userAgentData && navigator.userAgentData.mobile) || /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent || '') || (matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) < 900);
+  const LEVELS = ['high', 'med', 'low'];
+  const perf = { level: cfg.quality === 'auto' ? (isMobile ? 'med' : 'high') : cfg.quality, renderMs: 0, gap: 0, over: 0, cool: 0, fps: 0, frames: 0, fpsT: 0 };
+  const renderer = new C.Renderer($('game'), { quality: perf.level });
+  let menuDirty = true, lastMenuDraw = 0;
+  window.addEventListener('resize', () => { renderer.resize(); menuDirty = true; });
   C.audio.enabled = cfg.sound;
   const play = (n) => C.audio.play(n);
 
@@ -324,6 +329,9 @@
     sync();
   };
   seg('modeSeg', 'mode'); seg('catSeg', 'cat'); seg('steerSeg', 'steer');
+  seg('qualSeg', 'quality');
+  $('qualSeg').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => applyQuality()));
+  $('showFps').checked = cfg.showFps; $('showFps').addEventListener('change', () => { cfg.showFps = $('showFps').checked; store.set('showFps', cfg.showFps); });
   $('autoItems').checked = cfg.autoItems; $('autoItems').addEventListener('change', () => { cfg.autoItems = $('autoItems').checked; store.set('autoItems', cfg.autoItems); if (state.race) state.race.autoItems = cfg.autoItems; });
 
   $('invert').checked = cfg.invertSteer; $('invert').addEventListener('change', () => { cfg.invertSteer = $('invert').checked; store.set('invertSteer', cfg.invertSteer); });
@@ -377,7 +385,7 @@
     const ftp = ftpValid() ? cfg.ftp : 200, wt = weightValid() ? cfg.weight : 75; // (fallbacks only for the menu backdrop)
     return new C.Race({ track: C.buildTrack(def), laps: lapsFor(def), mass: wt + 9, pace: ftp * C.RIVAL_CATS[cfg.cat].factor, difficulty: 1, rubber: cfg.rubber, autoSteer: cfg.steer === 'auto', autoItems: cfg.autoItems });
   }
-  function makeDemo() { if (state.mode === 'menu') state.race = makeRace(); }
+  function makeDemo() { if (state.mode === 'menu') { state.race = makeRace(); menuDirty = true; } }
 
   $('btnStart').addEventListener('click', () => { if (!ftpValid() || !weightValid()) return; state.champ = cfg.mode === 'champ' ? newChamp() : null; startRace(); });
   $('btnAgain').addEventListener('click', () => {
@@ -401,7 +409,7 @@
     acquireWake();
   }
   function toMenu() {
-    state.mode = 'menu'; state.paused = false; state.champ = null; $('menu').hidden = false; $('results').hidden = true; $('pause').hidden = true; makeDemo(); releaseWake();
+    state.mode = 'menu'; state.paused = false; state.champ = null; $('menu').hidden = false; $('results').hidden = true; $('pause').hidden = true; makeDemo(); menuDirty = true; releaseWake();
     if (trainer.link) trainer.link.setGrade(0);
   }
 
@@ -527,15 +535,38 @@
   // rear-view mirror: a second small renderer looking backward along the reversed track
   let mirrorCv = null, mirrorR = null;
   function renderMirror(race, dt) {
-    if (!mirrorR) { mirrorCv = document.createElement('canvas'); mirrorR = new C.Renderer(mirrorCv, { fixed: [360, 128], mirror: true, camH: 105, camBack: 60, depth: 0.95, drawMax: 44, pitch: false, speedFov: false, rw: 135 }); }
+    if (!mirrorR) { mirrorCv = document.createElement('canvas'); mirrorR = new C.Renderer(mirrorCv, { fixed: [360, 128], mirror: true, camH: 105, camBack: 60, depth: 0.95, drawMax: 44, pitch: false, speedFov: false, rw: 135, quality: 'low' }); }
     mirrorR.render(C.buildMirrorView(race), dt, { menu: true });
     return mirrorCv;
   }
   const debug = { manual: false }; // manual: a test harness drives tick() itself at a fixed step (used for smooth, deterministic captures)
+  let lastRun = 0;
+  function setLevel(level, why) {
+    if (level === perf.level) return;
+    perf.level = level; renderer.setQuality(level); perf.over = 0; perf.cool = 4; menuDirty = true;
+    if (why && state.mode === 'race') toast(why, '#ffd166', 2.2);
+  }
+  function applyQuality() { cfg.quality === 'auto' ? setLevel(isMobile ? 'med' : 'high') : setLevel(cfg.quality); }
+  // Auto: if frames take too long (or the cap can't be met) for ~2.5 s, drop one level
+  function autoManage(dt, renderMs, gap) {
+    perf.renderMs += (renderMs - perf.renderMs) * 0.1; perf.gap += (gap - perf.gap) * 0.08;
+    perf.cool = Math.max(0, perf.cool - dt);
+    if (cfg.quality !== 'auto' || state.mode !== 'race' || state.paused || !state.race || state.race.time < 1.5 || perf.cool > 0) { perf.over = 0; return; }
+    const interval = 1000 / renderer.q.fps, bad = perf.renderMs > interval * 0.7 || perf.gap > interval * 1.4;
+    perf.over = bad ? perf.over + dt : Math.max(0, perf.over - dt * 2);
+    if (perf.over > 2.5) { const i = LEVELS.indexOf(perf.level); if (i < LEVELS.length - 1) setLevel(LEVELS[i + 1], 'Running slowly: graphics lowered'); else perf.over = 0; }
+  }
   function frame(now) {
-    const dt = Math.min(0.05, (now - last) / 1000); last = now;
-    if (!debug.manual) tick(dt, now);
     requestAnimationFrame(frame);
+    if (debug.manual) { last = now; return; }
+    const racing = state.mode === 'race', interval = 1000 / (racing ? renderer.q.fps : 10);
+    if (now - lastRun < interval - 3) return; // frame cap: a 90/120 Hz phone screen needn't be drawn that often
+    const gap = now - lastRun; lastRun = now;
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    perf.frames++; perf.fpsT += gap; if (perf.fpsT >= 500) { perf.fps = perf.frames * 1000 / perf.fpsT; perf.frames = 0; perf.fpsT = 0; }
+    const t0 = performance.now();
+    tick(dt, now);
+    autoManage(dt, performance.now() - t0, racing ? gap : 0);
   }
   function tick(dt, now) {
     const race = state.race;
@@ -574,13 +605,16 @@
     if (state.paused) $('pauseMsg').textContent = state.pauseMsg || (trainer.link && staleTrainer ? 'No power signal from the trainer.' : 'Take a breather. The race is frozen.');
     if (!$('menu').hidden) updateLivePanel(dt);
 
+    if (state.mode === 'menu' && !menuDirty && now - lastMenuDraw < 1000) { flushSnaps(now); return; } // backdrop is static behind the menu: don't redraw it every frame
+    if (state.mode === 'menu') { menuDirty = false; lastMenuDraw = now; }
     if (race) {
       const p = race.player;
-      const mirror = cfg.mirror && state.mode === 'race' ? renderMirror(race, state.paused ? 0 : dt) : null;
+      const mirror = cfg.mirror && state.mode === 'race' && perf.level !== 'low' && renderer.W > 900 ? renderMirror(race, state.paused ? 0 : dt) : null;
       renderer.render(race, state.paused ? 0 : dt, {
         mirror,
         power: p.pw, cadence: cadenceNow(now) || (trainer.link ? 0 : (p.v > 0.5 ? Math.round(p.rpm) : 0)), hr: hrNow(now), maxHr: cfg.maxHr || 190, ftp: cfg.ftp, weight: cfg.weight,
         toasts: state.toasts, incoming: state.incoming > 0, menu: state.mode === 'menu',
+        fps: cfg.showFps && state.mode === 'race' ? `${Math.round(perf.fps)} fps · ${perf.level} · ${perf.renderMs.toFixed(1)} ms` : '',
         warning: race.state === 'racing' && staleTrainer && !state.paused ? '⚠ NO POWER SIGNAL' : '',
         chips: [
           trainer.link ? { label: trainer.connected && !staleTrainer ? 'Trainer' : 'Trainer ✗', state: trainer.connected && !staleTrainer ? 'ok' : 'bad' } : { label: 'Keyboard power', state: 'off' },
@@ -594,6 +628,6 @@
 
   refreshLabels(); makeDemo();
   if (cfg.ftp == null) $('ftp').focus(); // the one thing we need from a new player
-  window.CritDebug = { hr, cad, debug, tick, kb, renderer, state, cfg, trainer, ride, startRace, toMenu, showResults, onRideMessage, rideSteer };
+  window.CritDebug = { perf, setLevel, hr, cad, debug, tick, kb, renderer, state, cfg, trainer, ride, startRace, toMenu, showResults, onRideMessage, rideSteer };
   requestAnimationFrame(frame);
 })();

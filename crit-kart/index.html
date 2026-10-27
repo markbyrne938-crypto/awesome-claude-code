@@ -206,6 +206,14 @@
           <label class="chk"><input id="sound" type="checkbox"> Sound effects</label>
           <label class="chk"><input id="rubber" type="checkbox"> Keep the bunch together (small rubber band)</label>
           <label class="chk"><input id="mirror" type="checkbox"> Rear-view mirror</label>
+          <label style="margin-top:10px" id="qualLabel">Graphics quality</label>
+          <div class="seg" id="qualSeg" role="group" aria-labelledby="qualLabel">
+            <button type="button" data-v="auto" aria-pressed="true">Auto</button>
+            <button type="button" data-v="high" aria-pressed="false">High</button>
+            <button type="button" data-v="med" aria-pressed="false">Med</button>
+            <button type="button" data-v="low" aria-pressed="false">Low</button>
+          </div>
+          <label class="chk"><input id="showFps" type="checkbox"> Show frame rate during races</label>
           <label class="chk"><input id="fitMap" type="checkbox"> Add a virtual map to saved rides (.fit)</label>
           <label for="maxHr" style="margin-top:10px">Max heart rate (bpm, for HR colours)</label><input id="maxHr" type="number" inputmode="numeric" min="120" max="230" placeholder="190">
         </div>
