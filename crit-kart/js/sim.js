@@ -15,6 +15,18 @@
     golden: { name: 'Golden Bidon', desc: 'Hits the race leader' },
   };
 
+  // Rival categories: how hard the other riders ride, as a fraction of YOUR FTP (their pace is also varied +-4 % per rider,
+  // and they attack now and then, so the bunch averages a little above the base figure).
+  const RIVAL_CATS = {
+    D: { name: 'Social', factor: 0.85, blurb: 'a relaxed group ride' },
+    C: { name: 'Steady', factor: 0.93, blurb: 'a bit under your FTP' },
+    B: { name: 'Even match', factor: 1.0, blurb: 'at or just above your FTP' },
+    A: { name: 'Hard', factor: 1.08, blurb: 'clearly above your FTP' },
+  };
+  const rivalPreview = (ftp, cat) => { const base = ftp * RIVAL_CATS[cat].factor; return { base, lo: base * 0.96, avg: base * 1.02, hi: base * 1.07 }; };
+  // Zwift-style racing category from your W/kg
+  const riderCategory = (wkg) => (wkg >= 4.0 ? 'A' : wkg >= 3.2 ? 'B' : wkg >= 2.5 ? 'C' : 'D');
+
   const AI_RIDERS = [
     ['Tina Turbo', '#ff4d6d'], ['Sir Spokes', '#4dabf7'], ['Pedro Pedal', '#ffa94d'], ['Cadence Kate', '#b197fc'],
     ['Wattson', '#51cf66'], ['Chain Reaction', '#ffd43b'], ['Gear-ge', '#3bc9db'],
@@ -26,7 +38,7 @@
       this.s = 0; this.x = 0; this.v = 0; this.power = 0; this.pw = 0; this.steer = 0; this.lean = 0;
       this.item = null; this.stun = 0; this.boost = 0; this.shield = 0; this.invuln = 0; this.draft = 0;
       this.finished = false; this.finishTime = null; this.lap = 1; this.phase = Math.random() * 6; this.grade = 0;
-      this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
+      this.pSum = 0; this.pT = 0; this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
       this.ai = null;
     }
   }
@@ -34,7 +46,7 @@
   class Race {
     // opts: track, laps, mass (rider+bike, kg), pace (watts for an average AI rider), difficulty (0.8..1.2)
     constructor(opts) {
-      this.track = opts.track; this.laps = opts.laps; this.mass = opts.mass; this.pace = opts.pace; this.diff = opts.difficulty || 1;
+      this.track = opts.track; this.laps = opts.laps; this.mass = opts.mass; this.pace = opts.pace; this.diff = opts.difficulty || 1; this.rubber = opts.rubber !== false;
       this.length = this.track.length; this.total = this.laps * this.length;
       this.time = -4; this.state = 'countdown'; this.events = []; this.hazards = []; this.projectiles = [];
       this.riders = [];
@@ -46,7 +58,7 @@
       for (let i = 0; i < slots; i++) {
         let r;
         if (i === playerSlot) r = player;
-        else { const [n, c] = aiList.shift(); r = new Rider(n, c, false); r.ai = { f: rand(0.93, 1.07), lane: rand(-0.6, 0.6), itemT: 0, attackT: rand(15, 40), attacking: 0, phase: Math.random() * 6, sloppy: Math.random() < 0.3 }; }
+        else { const [n, c] = aiList.shift(); r = new Rider(n, c, false); r.ai = { f: rand(0.96, 1.04), lane: rand(-0.6, 0.6), itemT: 0, attackT: rand(15, 40), attacking: 0, phase: Math.random() * 6, sloppy: Math.random() < 0.3 }; }
         const row = Math.floor(i / 2), col = i % 2;
         r.s = -(row * 2.8 + 1.5); r.x = col ? 0.35 : -0.35;
         this.riders.push(r);
@@ -100,6 +112,7 @@
       }
       r.draft += (best - r.draft) * Math.min(1, dt * 4);
 
+      if (!r.finished) { r.pSum += r.pw * dt; r.pT += dt; }
       const grade = this.track.gradeAt(r.s); r.grade = grade;
       const theta = Math.atan(grade);
       let P = r.pw * (r.boost > 0 ? 1.45 : 1);
@@ -267,14 +280,14 @@
       const a = r.ai, t = this.time, p = this.player;
       if (this.state === 'countdown') { r.power = 0; return; }
       const grade = this.track.gradeAt(r.s);
-      let w = this.pace * a.f * this.diff * (1 + clamp(grade * 4, -0.25, 0.3));
+      let w = this.pace * a.f * this.diff * (1 + clamp(grade * 3, -0.2, 0.25));
       w *= 1 + 0.04 * Math.sin(t * 0.7 + a.phase);
       a.attackT -= dt;
-      if (a.attacking > 0) { a.attacking -= dt; w *= 1.3; if (a.attacking <= 0) a.attackT = rand(25, 60); }
-      else if (a.attackT <= 0) a.attacking = rand(6, 11);
+      if (a.attacking > 0) { a.attacking -= dt; w *= 1.2; if (a.attacking <= 0) a.attackT = rand(30, 60); }
+      else if (a.attackT <= 0) a.attacking = rand(5, 9);
       const gap = r.s - p.s;
-      // rubber band: the bunch eases off when far ahead of you and chases when dropped, so you always have a pack to race
-      if (gap > 50) w *= 1 - clamp((gap - 50) / 300, 0, 0.13); else if (gap < -50) w *= 1 + clamp((-gap - 50) / 300, 0, 0.15);
+      // optional rubber band (small, so rival power stays tied to your FTP): ease off when far ahead, chase a little when dropped
+      if (this.rubber) { if (gap > 80) w *= 1 - clamp((gap - 80) / 400, 0, 0.06); else if (gap < -80) w *= 1 + clamp((-gap - 80) / 400, 0, 0.08); }
       r.power = Math.max(0, w);
 
       // steering: lane + box seeking + hazard dodging
@@ -316,7 +329,7 @@
 
     results() {
       const order = this.sorted();
-      return order.map((r, i) => ({ place: i + 1, name: r.name, color: r.color, isPlayer: r.isPlayer, time: r.finished ? r.finishTime : null, behind: r.finished ? 0 : Math.max(0, this.total - r.s) }));
+      return order.map((r, i) => ({ place: i + 1, name: r.name, color: r.color, isPlayer: r.isPlayer, time: r.finished ? r.finishTime : null, behind: r.finished ? 0 : Math.max(0, this.total - r.s), avgPower: r.pT > 0 ? r.pSum / r.pT : 0 }));
     }
   }
 
@@ -334,5 +347,5 @@
     return lapT * 1.15; // allowance for the standing start, cornering and obstacles
   }
 
-  Object.assign(C, { Race, Rider, ITEMS, CDA, estimateLapTime });
+  Object.assign(C, { Race, Rider, ITEMS, CDA, estimateLapTime, RIVAL_CATS, rivalPreview, riderCategory });
 })();

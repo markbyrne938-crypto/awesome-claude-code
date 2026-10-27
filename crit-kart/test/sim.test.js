@@ -53,3 +53,17 @@ for (const def of C.COURSES) {
 }
 console.log('all ok');
 for (const def of C.COURSES) { const t = C.buildTrack(def); console.log(def.id, 'est 12 laps @250W', (C.estimateLapTime(t, 250, 84) * Math.round(12 * (def.lapScale || 1)) / 60).toFixed(1), 'min'); }
+
+// Rival pace must follow the user's FTP and the chosen category (average rival power / FTP, 3-lap races)
+for (const ftp of [150, 250, 330]) for (const [cat, info] of Object.entries(C.RIVAL_CATS)) {
+  const track = C.buildTrack(C.COURSES[0]), pace = ftp * info.factor;
+  const race = new C.Race({ track, laps: 3, mass: 84, pace, difficulty: 1 });
+  let t = 0;
+  while (race.state !== 'finished' && t < 600) { race.update(1 / 30, { power: ftp, steer: bot(race), use: false }); race.events.length = 0; t += 1 / 30; }
+  const rivals = race.results().filter((r) => !r.isPlayer), avg = rivals.reduce((a, r) => a + r.avgPower, 0) / rivals.length;
+  const ratio = avg / pace;
+  assert.ok(ratio > 0.97 && ratio < 1.07, `FTP ${ftp} cat ${cat}: rivals averaged ${avg.toFixed(0)} W = ${(avg / ftp).toFixed(2)}x FTP (pace ${pace.toFixed(0)})`);
+  if (ftp === 250) console.log(`FTP ${ftp} Cat ${cat} ${info.name}: rivals avg ${avg.toFixed(0)} W = ${(avg / ftp).toFixed(2)} x FTP`);
+}
+assert.deepStrictEqual(['D', 'C', 'B', 'A'].map((c) => C.riderCategory({ D: 2.0, C: 2.8, B: 3.5, A: 4.4 }[c])), ['D', 'C', 'B', 'A']);
+console.log('category checks ok');

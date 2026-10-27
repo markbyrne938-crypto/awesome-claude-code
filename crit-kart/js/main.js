@@ -11,8 +11,8 @@
   const POINTS = [10, 8, 6, 5, 4, 3, 2, 1];
 
   const cfg = {
-    course: store.get('course', 'meadow'), laps: store.get('laps', 12), ftp: store.get('ftp', 200), weight: store.get('weight', 75),
-    difficulty: store.get('difficulty', 1), gradeFeel: store.get('gradeFeel', 0.7), invertSteer: store.get('invertSteer', false),
+    course: store.get('course', 'meadow'), laps: store.get('laps', 12), ftp: store.get('ftp', null), weight: store.get('weight', 75),
+    cat: store.get('cat', 'B'), rubber: store.get('rubber', true), gradeFeel: store.get('gradeFeel', 0.7), invertSteer: store.get('invertSteer', false),
     mode: store.get('mode', 'single'), sens: store.get('sens', 1), sound: store.get('sound', true),
   };
   const state = {
@@ -37,7 +37,13 @@
     logLines.push(`${t} ${s}`); if (logLines.length > 60) logLines.shift();
     const el = $('log'); el.textContent = logLines.slice(-18).join('\n'); el.scrollTop = el.scrollHeight;
   };
-  function setStatus(id, msg, bad) { const el = $(id); el.textContent = msg; el.className = 'status' + (bad ? ' bad' : ''); }
+  function setStatus(id, msg, bad) {
+    const el = $(id); el.textContent = msg;
+    const good = !bad && /connected|calibrated|bound|Any button/i.test(msg) && !/dis|not |could not|failed/i.test(msg);
+    el.className = 'status' + (bad ? ' bad' : good ? ' ok' : '');
+    const dot = $(id + 'Dot');
+    if (dot) dot.className = 'dot' + (bad ? ' bad' : good ? ' ok' : '');
+  }
   $('btnCopyLog').addEventListener('click', async () => {
     try { await navigator.clipboard.writeText(logLines.join('\n')); log('(log copied to clipboard)'); } catch (e) { log('copy failed — select the text manually'); }
   });
@@ -209,25 +215,78 @@
   // ---------- Menu wiring ----------
   const courseSel = $('course');
   C.COURSES.forEach((c) => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; courseSel.appendChild(o); });
+  const ftpValid = () => Number.isFinite(cfg.ftp) && cfg.ftp >= 60 && cfg.ftp <= 700;
+  const weightValid = () => Number.isFinite(cfg.weight) && cfg.weight >= 35 && cfg.weight <= 200;
   const bind = (id, key, num) => {
     const el = $(id); el.value = cfg[key];
     el.addEventListener('input', () => { cfg[key] = num ? Number(el.value) : el.value; store.set(key, cfg[key]); if (key === 'course') makeDemo(); refreshLabels(); });
   };
-  bind('course', 'course'); bind('laps', 'laps', true); bind('ftp', 'ftp', true); bind('weight', 'weight', true); bind('difficulty', 'difficulty', true);
-  bind('gradeFeel', 'gradeFeel', true); bind('mode', 'mode'); bind('sens', 'sens', true);
+  bind('course', 'course'); bind('laps', 'laps', true); bind('gradeFeel', 'gradeFeel', true); bind('sens', 'sens', true);
+
+  // required numeric fields (empty = not set, never silently defaulted)
+  const numField = (id, key, valid) => {
+    const el = $(id); el.value = cfg[key] == null ? '' : cfg[key];
+    el.addEventListener('input', () => {
+      const v = el.value.trim() === '' ? null : Number(el.value);
+      cfg[key] = v; store.set(key, v);
+      el.classList.toggle('invalid', v !== null && !valid());
+      refreshLabels();
+    });
+  };
+  numField('ftp', 'ftp', ftpValid); numField('weight', 'weight', weightValid);
+
+  // FTP estimator (95 % of a 20-minute best)
+  $('ftp20').addEventListener('input', () => {
+    const v = Number($('ftp20').value), ok = v >= 50 && v <= 800;
+    $('ftpEst').textContent = ok ? `Estimated FTP: ${Math.round(v * 0.95)} W (95% of ${v} W)` : 'Estimated FTP is 95% of that number.';
+    $('btnUseEst').disabled = !ok;
+  });
+  $('btnUseEst').addEventListener('click', () => {
+    cfg.ftp = Math.round(Number($('ftp20').value) * 0.95); store.set('ftp', cfg.ftp); $('ftp').value = cfg.ftp; $('ftp').classList.remove('invalid'); $('ftpCalc').open = false; refreshLabels();
+  });
+
+  // segmented controls (mode, rival category)
+  const seg = (id, key) => {
+    const group = $(id);
+    const sync = () => group.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === cfg[key])));
+    group.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => { cfg[key] = b.dataset.v; store.set(key, cfg[key]); sync(); refreshLabels(); }));
+    sync();
+  };
+  seg('modeSeg', 'mode'); seg('catSeg', 'cat');
+
   $('invert').checked = cfg.invertSteer; $('invert').addEventListener('change', () => { cfg.invertSteer = $('invert').checked; store.set('invertSteer', cfg.invertSteer); });
   $('sound').checked = cfg.sound; $('sound').addEventListener('change', () => { setSound($('sound').checked); play('pickup'); });
+  $('rubber').checked = cfg.rubber; $('rubber').addEventListener('change', () => { cfg.rubber = $('rubber').checked; store.set('rubber', cfg.rubber); });
   function refreshLabels() {
     const def = C.COURSES.find((c) => c.id === cfg.course) || C.COURSES[0];
-    const est = (d) => C.estimateLapTime(C.buildTrack(d), cfg.ftp, cfg.weight + 9) * lapsFor(d) / 60;
+    const ok = ftpValid() && weightValid(), f = ftpValid() ? cfg.ftp : 200, wt = weightValid() ? cfg.weight : 75;
+    const est = (d) => C.estimateLapTime(C.buildTrack(d), f, wt + 9) * lapsFor(d) / 60;
+    const timeNote = ftpValid() ? ` — about ${est(def).toFixed(1)} min at ${cfg.ftp} W (less in the draft).` : '.';
     if (cfg.mode === 'champ') {
-      $('courseBlurb').textContent = `Championship: ${C.COURSES.map((c) => c.name).join(' → ')}. ${C.COURSES.map((c) => lapsFor(c)).join(' / ')} laps (about ${C.COURSES.map((c) => est(c).toFixed(0)).join(' / ')} min at ${cfg.ftp} W). Points 10-8-6-5-4-3-2-1.`;
+      $('courseBlurb').textContent = `Championship: ${C.COURSES.map((c) => c.name).join(' → ')}. ${C.COURSES.map((c) => lapsFor(c)).join(' / ')} laps. Points 10-8-6-5-4-3-2-1.`;
     } else {
       const t = C.buildTrack(def), len = Math.round(t.length);
-      $('courseBlurb').textContent = `${def.blurb} Lap ${len} m • ${lapsFor(def)} laps = ${(len * lapsFor(def) / 1000).toFixed(1)} km — about ${est(def).toFixed(1)} min at ${cfg.ftp} W (less in the draft).`;
+      $('courseBlurb').textContent = `${def.blurb} Lap ${len} m • ${lapsFor(def)} laps = ${(len * lapsFor(def) / 1000).toFixed(1)} km${timeNote}`;
     }
-    courseSel.disabled = cfg.mode === 'champ';
-    $('lapsVal').textContent = cfg.laps; $('diffVal').textContent = cfg.difficulty.toFixed(2) + '×'; $('feelVal').textContent = Math.round(cfg.gradeFeel * 100) + '%'; $('sensVal').textContent = cfg.sens.toFixed(1) + '×';
+    $('course').disabled = cfg.mode === 'champ';
+    $('lapsVal').textContent = cfg.laps; $('feelVal').textContent = Math.round(cfg.gradeFeel * 100) + '%'; $('sensVal').textContent = cfg.sens.toFixed(1) + '×';
+
+    // your category badge + what the rivals will ride
+    const badge = $('catBadge'), cat = C.RIVAL_CATS[cfg.cat];
+    if (ok) {
+      const wkg = cfg.ftp / cfg.weight; badge.hidden = false;
+      badge.textContent = `${wkg.toFixed(1)} W/kg: you'd race in Cat ${C.riderCategory(wkg)}`;
+      const pv = C.rivalPreview(cfg.ftp, cfg.cat);
+      $('rivalPreview').innerHTML = `Rivals ride about <b>${Math.round(pv.lo)}–${Math.round(pv.hi)} W</b> (average ≈ ${Math.round(pv.avg)} W, ${(pv.avg / cfg.weight).toFixed(1)} W/kg).<small>Cat ${cfg.cat} · ${cat.name}: ${cat.blurb}. Based on your FTP of ${cfg.ftp} W.</small>`;
+    } else {
+      badge.hidden = true;
+      $('rivalPreview').textContent = ftpValid() ? 'Enter your weight to see your category.' : 'Enter your FTP to see how hard the rivals ride.';
+    }
+    // Start is only available with a sensible FTP and weight
+    $('btnStart').disabled = !ok;
+    const hint = $('startHint');
+    hint.className = 'hint' + (ok ? '' : ' need');
+    hint.textContent = !ftpValid() ? (cfg.ftp == null ? 'Enter your FTP to start.' : 'FTP should be between 60 and 700 W.') : !weightValid() ? 'Weight should be between 35 and 200 kg.' : `Ready: ${cfg.mode === 'champ' ? 'championship' : def.name}, rivals in Cat ${cfg.cat}.`;
   }
   if (!hasBle) $('bleWarn').hidden = false;
 
@@ -235,11 +294,12 @@
   const currentCourseId = () => (state.champ ? state.champ.rounds[state.champ.round] : cfg.course);
   function makeRace() {
     const def = C.COURSES.find((c) => c.id === currentCourseId()) || C.COURSES[0];
-    return new C.Race({ track: C.buildTrack(def), laps: lapsFor(def), mass: cfg.weight + 9, pace: cfg.ftp * 0.8, difficulty: cfg.difficulty });
+    const ftp = ftpValid() ? cfg.ftp : 200, wt = weightValid() ? cfg.weight : 75; // (fallbacks only for the menu backdrop)
+    return new C.Race({ track: C.buildTrack(def), laps: lapsFor(def), mass: wt + 9, pace: ftp * C.RIVAL_CATS[cfg.cat].factor, difficulty: 1, rubber: cfg.rubber });
   }
   function makeDemo() { if (state.mode === 'menu') state.race = makeRace(); }
 
-  $('btnStart').addEventListener('click', () => { state.champ = cfg.mode === 'champ' ? newChamp() : null; startRace(); });
+  $('btnStart').addEventListener('click', () => { if (!ftpValid() || !weightValid()) return; state.champ = cfg.mode === 'champ' ? newChamp() : null; startRace(); });
   $('btnAgain').addEventListener('click', () => {
     if (state.champ && state.champ.round === state.champ.rounds.length - 1 && state.champ.finalShown) state.champ = newChamp(); // new championship after the final
     startRace();
@@ -253,7 +313,7 @@
     state.race = makeRace(); state.mode = 'race'; state.paused = false; state.pauseMsg = ''; state.toasts = []; state.resultsShown = false;
     state.powerSum = state.powerT = state.maxPower = 0; state.powerLog = []; state.sampleSum = state.sampleN = state.sampleT = 0; state.lapTimes = []; state.lastTick = null;
     state.place = state.placeCand = 0; state.placeTimer = 0;
-    kb.power = cfg.ftp * 0.9; ride.use = false;
+    kb.power = (cfg.ftp || 200) * 0.9; ride.use = false;
     $('menu').hidden = true; $('results').hidden = true; $('pause').hidden = true;
     const def = C.COURSES.find((c) => c.id === currentCourseId());
     toast(state.champ ? `Round ${state.champ.round + 1}/${state.champ.rounds.length}: ${def.name}` : def.name, '#fff', 3.5);
@@ -330,7 +390,7 @@
     state.resultsShown = true; state.paused = false; $('pause').hidden = true;
     const res = race.results(), champ = state.champ;
     if (champ) champ.pending = roundPoints(res);
-    $('resultsBody').innerHTML = res.map((r) => `<tr class="${r.isPlayer ? 'me' : ''}"><td>${r.place}</td><td><i style="background:${r.color}"></i>${r.name}</td><td>${r.time != null ? C.fmtTime(r.time) : '+' + Math.round(r.behind) + ' m to go'}</td>${champ ? `<td class="pts">+${champ.pending[r.name]}</td>` : ''}</tr>`).join('');
+    $('resultsBody').innerHTML = res.map((r) => `<tr class="${r.isPlayer ? 'me' : ''}"><td>${r.place}</td><td><i style="background:${r.color}"></i>${r.name}</td><td>${r.time != null ? C.fmtTime(r.time) : '+' + Math.round(r.behind) + ' m to go'}</td><td class="pts">${Math.round(r.avgPower)} W</td>${champ ? `<td class="pts">+${champ.pending[r.name]}</td>` : ''}</tr>`).join('');
     const avg = state.powerT ? Math.round(state.powerSum / state.powerT) : 0, np = normalizedPower(state.powerLog);
     const best = state.lapTimes.length ? C.fmtTime(Math.min(...state.lapTimes)) : '–';
     const stat = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
@@ -339,6 +399,7 @@
     $('resultsTitle').textContent = player.place === 1 ? '🏆 YOU WON!' : player.place <= 3 ? 'PODIUM!' : 'RESULTS';
     // championship panel
     const box = $('champBox'); box.hidden = !champ;
+    $('thPts').hidden = !champ;
     const last = champ && champ.round === champ.rounds.length - 1;
     $('btnNext').hidden = !(champ && !last);
     $('btnAgain').textContent = champ && last ? 'New championship' : champ ? 'Retry this round' : 'Race again';
@@ -409,6 +470,7 @@
   }
 
   refreshLabels(); makeDemo();
+  if (cfg.ftp == null) $('ftp').focus(); // the one thing we need from a new player
   window.CritDebug = { renderer, state, cfg, trainer, ride, startRace, toMenu, showResults, onRideMessage, rideSteer };
   requestAnimationFrame(frame);
 })();

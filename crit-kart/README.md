@@ -47,7 +47,16 @@ The Zwift Ride protocol is not public and I could not check it against a device.
 * **Zwift-style proportions**: a ~9 m two-lane road, riders about a quarter of the road width, a raised chase camera looking down on the rider, gentle sweeping bends (45-120 m radius) with the odd tighter corner, and obstacles/barriers/scenery sized to match. Riders show a three-quarter angle through bends. Speed is conveyed by short stripes, roadside bollards, a widening field of view and edge streaks.
 * **Camera**: the view now pitches with the road ahead so descents keep the road on screen instead of showing mostly sky.
 * **Riders**: a more naturalistic rear view (jointed legs, tapered kit with pockets, aero helmet, spoked wheel, varied skin tones and kit designs).
-* **The field**: 8 riders (you + 7 rivals). You start at the back of the grid with the whole bunch ahead in view; rivals stay in a tighter group via a gentle rubber band, and the default pace is 80 % of your FTP so riding at threshold keeps you in the mix. A Zwift-style leaderboard lists all eight with live gaps (the camera is behind you, so riders behind aren't on screen).
+* **The field and your FTP**: 8 riders (you + 7 rivals). You enter your **FTP** (required; there's a 20-minute-test estimator if you don't know it) and your weight. The rivals' power is derived from it. Pick a **rival category** (a small rubber band keeps the bunch together and can be turned off in Advanced):
+
+  | Category | Rivals ride about | Feel |
+  |---|---|---|
+  | D · Social | 0.87 x FTP | relaxed group ride |
+  | C · Steady | 0.98 x FTP | a bit under FTP |
+  | **B · Even (default)** | **1.03 x FTP** | at or just above FTP |
+  | A · Hard | 1.10 x FTP | clearly above FTP |
+
+  (Each rival varies +-4 % and attacks now and then, so the figures are averages; they're pinned by `test/sim.test.js`.) The menu shows your own Zwift-style category from W/kg (A 4.0+, B 3.2+, C 2.5+, D below) and previews the rivals' watts. Results list every rider's average power. You start at the back of the grid with the bunch ahead in view, and a Zwift-style leaderboard lists all eight with live gaps (the camera is behind you, so riders behind aren't on screen).
 * **Courses**: Sunny Meadows Crit (~520 m), Candy Canyon (steep and narrow, ~580 m, 3/4 of the laps), Neon Harbor Night Crit (the technical one, ~500 m). The menu estimates your race time from your FTP.
 * **Championship**: all three courses in a row, 10-8-6-5-4-3-2-1 points, final standings and a champion title.
 * **Results**: average / normalized power, W/kg, best lap, and a per-second power chart coloured by zone against your FTP.
