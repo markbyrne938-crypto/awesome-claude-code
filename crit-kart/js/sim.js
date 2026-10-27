@@ -118,7 +118,7 @@
       const k = Math.min(1, r.v / 4);
       const w = this.track.widthAt(r.s), walled = this.track.wallsAt(r.s);
       const push = this.track.curveAt(r.s) * 0.07 * Math.pow(r.v / 10, 2);
-      r.x += ((r.steer * 1.1 * k - push) / w) * dt; // narrower road = same sideways speed in metres, more in road fractions
+      r.x += ((r.steer * 0.9 * k - push) / w) * dt; // narrower road = same sideways speed in metres, more in road fractions
       r.scrape = Math.max(0, r.scrape - dt);
       if (walled) {
         const lim = 0.97;

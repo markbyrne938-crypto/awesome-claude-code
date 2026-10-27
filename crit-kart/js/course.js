@@ -6,7 +6,7 @@
   const UNIT = 100;        // render units per metre
   const SEG_LEN = 400;     // render units per segment (4 m)
   const VEXAG = 3.5;       // vertical exaggeration of scenery hills (physics uses the real grade)
-  const CURVE_SCALE = 0.45;
+  const CURVE_SCALE = 0.16; // matched to the ~9 m road: Zwift-style sweeping bends
   const NARROW = 0.88;     // below this width factor the road gets walls
 
   // pieces: [segments, turn in degrees per segment (+ = right), grade %, width factor (1 = full), feature]
@@ -15,22 +15,22 @@
     {
       id: 'meadow', name: 'Sunny Meadows Crit', blurb: 'Rolling park loop with speed bumps, a cone slalom and a tight pinch.', theme: 'meadow',
       pieces: [
-        [16, 0, 0], [10, 4, 0], [14, 0, 2, 1, 'bumps'], [10, -3, 3.5], [12, 0, 3.5, 0.75, 'cones'], [8, 5, 0],
-        [10, 0, -4], [6, -7, -3, 0.6], [12, -2, -3], [8, 0, -2, 1, 'potholes'], [10, 4, 0], [15, 0, 0],
+        [16, 0, 0], [12, 3, 0], [14, 0, 2, 1, 'bumps'], [12, -2.5, 3.5], [12, 0, 3.5, 0.75, 'cones'], [10, 3.5, 0],
+        [10, 0, -4], [8, -5, -3, 0.6], [12, -2, -3], [8, 0, -2, 1, 'potholes'], [12, 3, 0], [15, 0, 0],
       ],
     },
     {
       id: 'candy', lapScale: 0.75, name: 'Candy Canyon', blurb: 'Steep climb through a narrow gorge of barrels, then a fast hairpin descent.', theme: 'candy',
       pieces: [
-        [12, 0, 0], [8, -5, 2], [16, 0, 7, 0.6, 'barrels'], [10, 5, 6], [14, 0, 8, 0.8], [10, -4, -8],
-        [10, -8, -9, 0.7], [10, 0, -9, 1, 'bumps'], [12, 6, -5], [10, 0, -3], [12, -3, 0, 1, 'cones'], [10, 0, 0], [10, 4, 0],
+        [12, 0, 0], [10, -3.5, 2], [16, 0, 7, 0.6, 'barrels'], [12, 3.5, 6], [14, 0, 8, 0.8], [12, -3, -8],
+        [10, -6, -9, 0.7], [10, 0, -9, 1, 'bumps'], [14, 4, -5], [10, 0, -3], [12, -2.5, 0, 1, 'cones'], [10, 0, 0], [12, 3, 0],
       ],
     },
     {
       id: 'neon', name: 'Neon Harbor Night Crit', blurb: 'The technical one: chicane, tunnel with bumps, potholes and barrel gates.', theme: 'neon',
       pieces: [
-        [14, 0, 0], [7, 7, 0], [5, -7, 0], [7, 7, 0], [10, 0, 0, 1, 'potholes'], [7, 6, 0], [12, 0, 2, 0.55, 'bumps'], [10, 0, 4],
-        [6, -5, 0], [10, 0, -3, 1, 'cones'], [12, 0, -3], [8, 6, 0], [10, 0, 0, 0.8, 'barrels'], [6, 0, 0],
+        [14, 0, 0], [8, 5, 0], [6, -5, 0], [8, 5, 0], [10, 0, 0, 1, 'potholes'], [9, 4.5, 0], [12, 0, 2, 0.6, 'bumps'], [10, 0, 4],
+        [8, -4, 0], [10, 0, -3, 1, 'cones'], [12, 0, -3], [10, 4.5, 0], [10, 0, 0, 0.8, 'barrels'], [6, 0, 0],
       ],
     },
   ];
@@ -51,7 +51,7 @@
   };
 
   // obstacle hit radii (in half-road-width units), used by the sim and the renderer
-  const OBSTACLE_RADIUS = { cone: 0.13, barrel: 0.17, pothole: 0.17, bump: 9 };
+  const OBSTACLE_RADIUS = { cone: 0.12, barrel: 0.15, pothole: 0.15, bump: 9 };
 
   function mulberry32(a) {
     return function () {
@@ -99,15 +99,16 @@
     const segs = [];
     for (let i = 0; i < N; i++) {
       const scenery = [];
-      if (i % 2 === 0) {
+      if (width[i] > NARROW) { scenery.push({ off: -1.1, type: 'post', scale: 1, hue: i }); scenery.push({ off: 1.1, type: 'post', scale: 1, hue: i + 1 }); }
+      {
         const side = rnd() < 0.5 ? -1 : 1;
-        scenery.push({ off: side * (1.35 + rnd() * 1.4), type: theme.scenery[Math.floor(rnd() * theme.scenery.length)], scale: 0.8 + rnd() * 0.6, hue: Math.floor(rnd() * 360) });
-        if (rnd() < 0.45) scenery.push({ off: -side * (1.3 + rnd() * 1.6), type: theme.scenery[Math.floor(rnd() * theme.scenery.length)], scale: 0.8 + rnd() * 0.6, hue: Math.floor(rnd() * 360) });
+        scenery.push({ off: side * (1.3 + rnd() * 1.0), type: theme.scenery[Math.floor(rnd() * theme.scenery.length)], scale: 0.8 + rnd() * 0.6, hue: Math.floor(rnd() * 360) });
+        if (rnd() < 0.55) scenery.push({ off: -side * (1.3 + rnd() * 1.2), type: theme.scenery[Math.floor(rnd() * theme.scenery.length)], scale: 0.8 + rnd() * 0.6, hue: Math.floor(rnd() * 360) });
       }
       const w1 = width[i], w2 = width[(i + 1) % N];
       segs.push({
         i, curve: deg[i] * CURVE_SCALE, deg: deg[i], grade: grade[i], w1, w2, walls: (w1 + w2) / 2 < NARROW,
-        y1: ys[i] * VEXAG, y2: ys[i + 1] * VEXAG, alt: Math.floor(i / 2) % 2, scenery,
+        y1: ys[i] * VEXAG, y2: ys[i + 1] * VEXAG, alt: i % 2, scenery,
         p1: { world: { y: ys[i] * VEXAG, z: i * SEG_LEN }, camera: {}, screen: {} },
         p2: { world: { y: ys[i + 1] * VEXAG, z: (i + 1) * SEG_LEN }, camera: {}, screen: {} },
       });
