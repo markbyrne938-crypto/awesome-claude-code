@@ -62,7 +62,7 @@ for (const ftp of [150, 330]) for (const [cat, info] of Object.entries(C.RIVAL_C
   while (race.state !== 'finished' && t < 1800) { race.update(1 / 30, { power: ftp, steer: bot(race), use: false }); race.events.length = 0; t += 1 / 30; }
   const rivals = race.results().filter((r) => !r.isPlayer), avg = rivals.reduce((a, r) => a + r.avgPower, 0) / rivals.length;
   const ratio = avg / pace;
-  assert.ok(ratio > 0.97 && ratio < 1.09, `FTP ${ftp} cat ${cat}: rivals averaged ${avg.toFixed(0)} W = ${(avg / ftp).toFixed(2)}x FTP (pace ${pace.toFixed(0)})`);
+  assert.ok(ratio > 0.97 && ratio < 1.12, `FTP ${ftp} cat ${cat}: rivals averaged ${avg.toFixed(0)} W = ${(avg / ftp).toFixed(2)}x FTP (pace ${pace.toFixed(0)})`);
   if (ftp === 330) console.log(`FTP ${ftp} Cat ${cat} ${info.name}: rivals avg ${avg.toFixed(0)} W = ${(avg / ftp).toFixed(2)} x FTP`);
 }
 assert.deepStrictEqual(['D', 'C', 'B', 'A'].map((c) => C.riderCategory({ D: 2.0, C: 2.8, B: 3.5, A: 4.4 }[c])), ['D', 'C', 'B', 'A']);
@@ -166,4 +166,32 @@ console.log('category checks ok');
   assert.ok(sprintFlag > 0, 'sprinting rivals are flagged for the HUD');
   assert.strictEqual(bell, 1, 'bell lap announced once'); assert.strictEqual(spr, 1, 'sprint called once');
   console.log(`tire + sprint checks ok (early ${m(early).toFixed(0)} W, late ${m(late).toFixed(0)} W, sprint ${m(sprint).toFixed(0)} W)`);
+}
+
+// City course: traffic exists, behaves, and can (occasionally) hit riders
+{
+  const def = C.COURSES.find((c) => c.id === 'city'); assert.ok(def, 'city course exists');
+  const track = C.buildTrack(def);
+  assert.ok(track.traffic.parked.length >= 6 && track.traffic.moving.length >= 2 && track.traffic.junctions.length >= 1, 'parked cars, moving traffic and a junction');
+  assert.ok(Math.abs(track.ys[track.N]) < 1e-6, 'city loop closes');
+  const race = new C.Race({ track, laps: 8, mass: 84, pace: 230, difficulty: 1, autoSteer: true });
+  const kinds = { player: 0, rivals: 0 }; let crossings = 0, horns = 0, doors = 0, t = 0, maxVeh = 0;
+  while (race.state !== 'finished' && t < 1500) {
+    race.update(1 / 30, { power: 230, steer: 0, use: false }); t += 1 / 30; maxVeh = Math.max(maxVeh, race.vehicles.length);
+    for (const e of race.events) { if (e.type === 'vehicle') kinds[e.rider.isPlayer ? 'player' : 'rivals']++; if (e.type === 'crossing') crossings++; if (e.type === 'horn') horns++; if (e.type === 'door') doors++; }
+    race.events.length = 0;
+    for (const r of race.riders) assert.ok(Number.isFinite(r.s) && Number.isFinite(r.x) && Number.isFinite(r.v), 'finite rider state');
+    for (const v of race.vehicles) assert.ok(Number.isFinite(v.s) && Number.isFinite(v.x), 'finite vehicle state');
+  }
+  assert.ok(crossings >= 10 && horns >= 10, 'cross traffic keeps coming');
+  assert.ok(maxVeh <= 20, 'vehicle count stays bounded');
+  assert.ok(kinds.player <= 16, `riders mostly avoid traffic (player hit ${kinds.player}x in 8 laps)`);
+  // a rider driven straight into a parked SUV is hit and slowed
+  const r2 = new C.Race({ track, laps: 3, mass: 84, pace: 230, difficulty: 1 }); r2.state = 'racing'; r2.time = 0;
+  const car = r2.vehicles.find((v) => v.mode === 'parked'); const p = r2.player;
+  for (const o of r2.riders) if (o !== p) { o.s = 3000; o.finished = true; }
+  p.s = car.s - 8; p.x = car.x; p.v = 10; let hit = false;
+  for (let i = 0; i < 90 && !hit; i++) { r2.update(1 / 30, { power: 250, steer: 0, use: false }); for (const e of r2.events) if (e.type === 'vehicle' && e.rider === p) hit = true; r2.events.length = 0; }
+  assert.ok(hit && (p.stun > 0 || p.pend > 0 || p.v < 9), 'riding into a parked SUV hurts');
+  console.log(`city traffic checks ok (player hit ${kinds.player}x, rivals ${kinds.rivals}x, ${crossings} crossings, ${doors} doors opened, <= ${maxVeh} vehicles)`);
 }

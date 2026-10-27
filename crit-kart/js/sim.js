@@ -38,7 +38,7 @@
       this.s = 0; this.x = 0; this.v = 0; this.power = 0; this.pw = 0; this.steer = 0; this.lean = 0;
       this.item = null; this.stun = 0; this.boost = 0; this.shield = 0; this.invuln = 0; this.draft = 0;
       this.finished = false; this.finishTime = null; this.lap = 1; this.phase = Math.random() * 6; this.grade = 0;
-      this.vx = 0; this.pend = 0; this.rpm = 0; this.cadence = 0; this.cadF = 0.94 + Math.random() * 0.12; this.ghost = 1; this.status = ''; this.pSum = 0; this.pT = 0; this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
+      this.vehLast = -1; this.vehT = -9; this.vx = 0; this.pend = 0; this.rpm = 0; this.cadence = 0; this.cadF = 0.94 + Math.random() * 0.12; this.ghost = 1; this.status = ''; this.pSum = 0; this.pT = 0; this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
       this.ai = null;
     }
   }
@@ -69,6 +69,16 @@
       this.boxes = [];
       for (const s of this.track.boxRows) for (const x of [-0.5, 0, 0.5]) this.boxes.push({ s, x, active: true, respawn: 0 });
       this.finishCountdown = null;
+      this.vehicles = []; this.nextVid = 1;
+      const spec = this.track.traffic || { parked: [], moving: [], junctions: [] };
+      for (const q of spec.parked) this.vehicles.push(this.makeVehicle(Object.assign({ mode: 'parked' }, q)));
+      for (const q of spec.moving) this.vehicles.push(this.makeVehicle(Object.assign({ mode: 'traffic' }, q)));
+      this.junctions = spec.junctions.map((j) => ({ s: j.s, timer: rand(6, 11), active: null }));
+    }
+
+    makeVehicle(o) {
+      return { id: this.nextVid++, mode: o.mode, type: o.type, color: o.color, s: o.s, x: o.x, laneX: o.x, vs: o.vs || 0, vx: o.vx || 0, door: !!o.door, doorT: 0, pullOut: !!o.pullOut,
+        state: 'idle', timer: 0, blink: false, phase: 'lane', phT: rand(8, 18), swerveDir: 0 };
     }
 
     emit(type, data) { this.events.push(Object.assign({ type }, data)); }
@@ -189,6 +199,72 @@
       }
     }
 
+    // ---- traffic ----
+    updateVehicles(dt) {
+      const L = this.length, wrap = (d) => ((d % L) + L * 1.5) % L - L / 2;
+      const racing = this.state === 'racing';
+      let moving = 0; for (const v of this.vehicles) if (v.mode === 'traffic') moving++;
+      for (const v of this.vehicles) {
+        if (v.mode === 'parked') {
+          if (v.door && v.doorT > 0) v.doorT -= dt; // an opened door swings shut again
+          else if (v.door && racing && v.state === 'idle') { // a driver checks their mirror too late
+            for (const r of this.riders) { const d = wrap(v.s - r.s); if (!r.finished && d > 0 && d < 9 && Math.abs(r.x - Math.sign(v.x) * 0.62) < 0.4 && Math.random() < dt * 0.3) { v.doorT = 1.8; this.emit('door', { vehicle: v }); break; } }
+          }
+          if (v.pullOut && racing && v.state === 'idle' && moving < 5) {
+            for (const r of this.riders) { const d = wrap(v.s - r.s); if (!r.finished && d > 5 && d < 24) { v.state = 'signal'; v.timer = 0.9; this.emit('horn', { vehicle: v }); break; } }
+          }
+          if (v.state === 'signal') { v.blink = true; v.timer -= dt; if (v.timer <= 0) v.state = 'pull'; }
+          else if (v.state === 'pull') {
+            v.blink = false; v.vs = Math.min(5.6, v.vs + 3 * dt); v.s += v.vs * dt; v.x += (v.x > 0 ? -1 : 1) * 0.55 * dt;
+            if (Math.abs(v.x) < 0.5) { v.mode = 'traffic'; v.laneX = v.x > 0 ? 0.5 : -0.5; v.phase = 'lane'; v.phT = rand(8, 16); moving++; }
+          }
+        } else if (v.mode === 'traffic') {
+          v.s += v.vs * dt;
+          // keeps its lane, but now and then drifts toward the middle of the road (indicating first)
+          v.phT -= dt;
+          // a driver only drifts when the road beside them is empty
+          const alongside = this.riders.some((r) => { const d = wrap(v.s - r.s); return !r.finished && d > -14 && d < 10; });
+          if (v.phase === 'lane' && v.phT <= 0 && !alongside) { v.phase = 'signal'; v.phT = 0.9; v.blink = true; this.emit('horn', { vehicle: v }); }
+          else if (v.phase === 'lane' && v.phT <= 0) v.phT = 1.5;
+          else if (v.phase === 'signal' && v.phT <= 0) { v.phase = 'in'; v.phT = 2.4; }
+          else if (v.phase === 'in' && v.phT <= 0) { v.phase = 'lane'; v.phT = rand(14, 26); v.blink = false; }
+          const tx = v.phase === 'in' ? v.laneX * 0.3 : v.laneX, ox = v.x; // drifts part of the way toward the middle, never across it
+          v.x += clamp(tx - v.x, -0.6 * dt, 0.6 * dt); v.vx = (v.x - ox) / dt;
+        }
+      }
+      // cross traffic at junctions
+      for (const j of this.junctions) {
+        if (!j.active) {
+          j.timer -= dt;
+          if (j.timer <= 0 && racing) {
+            const side = Math.random() < 0.5 ? -1 : 1, v = this.makeVehicle({ mode: 'cross', type: Math.random() < 0.45 ? 'suv' : Math.random() < 0.5 ? 'van' : 'sedan', color: C.CAR_COLORS[Math.floor(Math.random() * C.CAR_COLORS.length)], s: j.s, x: side * 2.3, vx: -side * 1.25 });
+            this.vehicles.push(v); j.active = v; j.timer = rand(11, 18); this.emit('crossing', { s: j.s });
+            const lead = this.player.s; if (wrap(j.s - lead) > 0 && wrap(j.s - lead) < 140) this.emit('horn', { vehicle: v });
+          }
+        } else { const v = j.active; v.x += v.vx * dt; if (Math.abs(v.x) > 2.5) { this.vehicles.splice(this.vehicles.indexOf(v), 1); j.active = null; } }
+      }
+      // collisions with riders
+      if (!racing) return;
+      const VT = C.VEHICLE_TYPES;
+      for (const r of this.riders) {
+        if (r.finished || r.invuln > 0) continue;
+        const w = this.track.widthAt(r.s), halfRoad = 4.5 * w;
+        for (const v of this.vehicles) {
+          const d = wrap(v.s - r.s); if (Math.abs(d) > 4) continue;
+          const T = VT[v.type]; let hit = null;
+          const halfLong = v.mode === 'cross' ? T.wid * halfRoad + 0.5 : T.len / 2 + 0.5, halfLat = v.mode === 'cross' ? T.len / 2 / halfRoad + 0.06 : T.wid + 0.07;
+          if (Math.abs(d) < halfLong && Math.abs(v.x - r.x) < halfLat) hit = 'vehicle';
+          else if (v.doorT > 0.1 && Math.abs(d) < 1.2 && Math.abs(v.x - Math.sign(v.x) * 0.38 - r.x) < 0.14) hit = 'door';
+          if (!hit || (r.vehLast === v.id && this.time - r.vehT < 2.2)) continue;
+          r.vehLast = v.id; r.vehT = this.time;
+          const secs = hit === 'door' ? 0.8 : v.type === 'sedan' ? 1.1 : 1.5;
+          r.pend += r.v * 0.45; r.vx += (r.x >= v.x ? 1 : -1) * 1.5;
+          this.emit('vehicle', { rider: r, vehicle: v, kind: hit });
+          this.hit(r, secs, 'vehicle');
+        }
+      }
+    }
+
     updateObstacles(dt) {
       const obs = this.track.obstacles, L = this.length, R = C.OBSTACLE_RADIUS;
       for (const o of obs) if (o.down && o.type !== 'pothole' && this.time - o.downT > 25) o.down = false;
@@ -209,6 +285,7 @@
     }
 
     updateWorld(dt) {
+      this.updateVehicles(dt);
       this.updateObstacles(dt);
       for (const b of this.boxes) { if (!b.active) { b.respawn -= dt; if (b.respawn <= 0) b.active = true; } }
       for (const r of this.riders) {
@@ -335,12 +412,29 @@
         const d = ((o.s - r.s) % this.length + this.length) % this.length;
         if (d > 0 && d < 26 && Math.abs(o.x - r.x) < 0.3 && !(a.sloppy && ((o.s * 7) | 0) % 2)) { tx = o.x + (o.x > r.x || (o.x === r.x && o.x > 0) ? -0.5 : 0.5); break; }
       }
+      if (!(a.sloppy && Math.random() < 0.002)) tx = this.avoidVehicles(r, tx);
       const lim = this.track.wallsAt(r.s) ? 0.78 : 1.1;
       tx = clamp(tx, -lim, lim);
       a.txs = a.txs === undefined ? tx : a.txs + (tx - a.txs) * Math.min(1, dt * 3.5); // ease lane changes
       r.steer = clamp((a.txs - r.x) * 3, -1, 1);
 
       if (r.item) this.autoUseItem(r, dt, a);
+    }
+
+    // Steer around traffic: deal with the nearest vehicle ahead (or alongside), pass on the side facing the middle of the road,
+    // and keep the gap until we're clear of it. Cross traffic can't be dodged sideways.
+    avoidVehicles(r, tx) {
+      const L = this.length, VT = C.VEHICLE_TYPES; let best = null, bd = 34;
+      for (const v of this.vehicles) {
+        if (v.mode === 'cross') continue;
+        const d = ((v.s - r.s) % L + L * 1.5) % L - L / 2, T = VT[v.type];
+        if (d > -(T.len / 2 + 2) && d < bd) { bd = d; best = v; }
+      }
+      if (!best) return tx;
+      const T = VT[best.type], ttc = Math.max(0, bd) / Math.max(0.5, r.v - best.vs), xAt = best.x + (best.vx || 0) * Math.min(ttc, 1.5), need = T.wid + 0.22;
+      if (Math.abs(xAt - r.x) > need + 0.3 && Math.abs(xAt - tx) > need) return tx; // already clear
+      const left = xAt - (need + 0.1), right = xAt + (need + 0.1), pref = xAt >= 0 ? left : right, alt = xAt >= 0 ? right : left;
+      return Math.abs(pref) <= 0.9 ? pref : alt;
     }
 
     // Sensible automatic item use, shared by the AI and by a player with steering/items on auto.
@@ -390,6 +484,7 @@
         const d = ((o.s - r.s) % L + L) % L;
         if (d > 0 && d < 26 && Math.abs(o.x - r.x) < 0.3) { tx = o.x + (o.x > r.x || (o.x === r.x && o.x > 0) ? -0.5 : 0.5); break; }
       }
+      tx = this.avoidVehicles(r, tx);
       tx = clamp(tx, -lim, lim);
       st.txs = st.txs === undefined ? tx : st.txs + (tx - st.txs) * Math.min(1, dt * 3.5);
       return clamp((st.txs - r.x) * 3.2, -1, 1);

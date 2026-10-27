@@ -35,6 +35,21 @@
     },
   ];
 
+  COURSES.push({
+    id: 'city', name: 'Downtown Dash', theme: 'city',
+    blurb: 'City-block crit. Parked SUVs with opening doors, traffic that drifts into the road, and cars crossing at the junction.',
+    pieces: [
+      [14, 0, 0, 1, 'parked'], [12, 0, 0, 1, 'parked'],           // side A: parked cars (doors!)
+      [8, 11.25, 0],
+      [22, 0, 0, 1, 'junction'],                                  // side B: cross traffic at the junction
+      [8, 11.25, 0],
+      [10, 0, 2.5], [10, 0, -2.5], [8, 0, 0, 1, 'potholes'],      // side C: a small bridge hump, then potholes
+      [8, 11.25, 0],
+      [14, 0, 0, 0.78, 'cones'], [10, 0, 0, 1, 'traffic'],        // side D: roadworks squeeze, then moving traffic
+      [8, 11.25, 0],
+    ],
+  });
+
   const THEMES = {
     meadow: {
       sky: ['#5ec8ff', '#e3f8ff'], sun: '#fff7a8', grass: ['#5fcf4f', '#54c244'], road: ['#5d6472', '#565d6b'],
@@ -44,6 +59,10 @@
       sky: ['#ff9fe0', '#fff0fb'], sun: '#fff3a0', grass: ['#ffd6f1', '#ffc7ea'], road: ['#7b5d92', '#74558b'],
       rumble: ['#ff6ec7', '#ffffff'], lane: '#fff3a0', hills: ['#ffb8e6', '#ff9ad8'], fog: '#fff0fb', scenery: ['lolly', 'cane', 'lolly', 'sign'],
     },
+    city: {
+      sky: ['#7fb6ff', '#e6f1ff'], sun: '#fff3b0', grass: ['#c9ccd6', '#bfc3ce'], road: ['#3d4252', '#383d4b'],
+      rumble: ['#d9dce4', '#ffffff'], lane: '#ffd43b', hills: ['#9db0d4', '#8196c2'], fog: '#e6f1ff', scenery: ['building'], city: true, skyline: true,
+    },
     neon: {
       sky: ['#0b0d33', '#4b2087'], sun: '#ff7ae8', grass: ['#18244d', '#131e43'], road: ['#2b305c', '#262b55'],
       rumble: ['#00f0ff', '#ff2bd6'], lane: '#00f0ff', hills: ['#2a2f78', '#3a2a8a'], fog: '#4b2087', scenery: ['lamp', 'lamp', 'sign', 'bush'], stars: true,
@@ -52,6 +71,13 @@
 
   // obstacle hit radii (in half-road-width units), used by the sim and the renderer
   const OBSTACLE_RADIUS = { cone: 0.12, barrel: 0.15, pothole: 0.15, bump: 9 };
+  // Vehicle sizes: len = metres along the road, wid = half-width in road-half-width units (the road is ~9 m wide), w/h = sprite units
+  const VEHICLE_TYPES = {
+    suv: { len: 5.0, wid: 0.25, w: 215, h: 200 },
+    sedan: { len: 4.5, wid: 0.21, w: 190, h: 150 },
+    van: { len: 5.4, wid: 0.24, w: 205, h: 225 },
+  };
+  const CAR_COLORS = ['#c92a2a', '#1c7ed6', '#2f9e44', '#f08c00', '#495057', '#e8e8ef', '#9c36b5', '#1b1f2a', '#ffd43b'];
 
   function mulberry32(a) {
     return function () {
@@ -105,6 +131,12 @@
         scenery.push({ off: side * (1.3 + rnd() * 1.0), type: theme.scenery[Math.floor(rnd() * theme.scenery.length)], scale: 0.8 + rnd() * 0.6, hue: Math.floor(rnd() * 360) });
         if (rnd() < 0.55) scenery.push({ off: -side * (1.3 + rnd() * 1.2), type: theme.scenery[Math.floor(rnd() * theme.scenery.length)], scale: 0.8 + rnd() * 0.6, hue: Math.floor(rnd() * 360) });
       }
+      if (theme.city) { // buildings form a continuous facade; trees and lamps sit on the pavement
+        scenery.length = 0;
+        if (i % 2 === 0) for (const side of [-1, 1]) scenery.push({ off: side * (2.2 + rnd() * 0.2), type: 'building', scale: 0.8 + rnd() * 0.8, hue: Math.floor(rnd() * 360) });
+        if (i % 3 === 0) for (const side of [-1, 1]) scenery.push({ off: side * 1.3, type: 'streettree', scale: 0.9 + rnd() * 0.3, hue: i });
+        if (i % 7 === 0) for (const side of [-1, 1]) scenery.push({ off: side * 1.16, type: 'streetlamp', scale: 1, hue: i });
+      }
       const w1 = width[i], w2 = width[(i + 1) % N];
       segs.push({
         i, curve: deg[i] * CURVE_SCALE, deg: deg[i], grade: grade[i], w1, w2, walls: (w1 + w2) / 2 < NARROW,
@@ -115,16 +147,25 @@
     }
 
     // Obstacles from the piece features. Positions are metres along the lap, x is in half-road-width units.
-    const obstacles = [];
+    const obstacles = [], decals = [], traffic = { parked: [], moving: [], junctions: [] };
     const add = (seg, type, x) => obstacles.push({ s: seg * (SEG_LEN / UNIT) + 2, x, type, down: false, downT: 0 });
+    const pick = (arr) => arr[Math.floor(rnd() * arr.length)];
     let k0 = 0;
     for (const [n, , , , feature] of def.pieces) {
-      if (feature === 'bumps') for (let j = 2; j < n - 1; j += 6) add(k0 + j, 'bump', 0);
-      else if (feature === 'cones') { let c = 0; for (let j = 2; j < n - 1; j += 3, c++) add(k0 + j, 'cone', c % 2 ? 0.45 : -0.45); }
-      else if (feature === 'potholes') for (const f of [0.2, 0.5, 0.8]) add(k0 + Math.floor(n * f), 'pothole', (rnd() * 2 - 1) * 0.7);
-      else if (feature === 'barrels') {
+      const feats = (feature || '').split('+');
+      if (feats.includes('bumps')) for (let j = 2; j < n - 1; j += 6) add(k0 + j, 'bump', 0);
+      if (feats.includes('cones')) { let c = 0; for (let j = 2; j < n - 1; j += 3, c++) add(k0 + j, 'cone', c % 2 ? 0.45 : -0.45); }
+      if (feats.includes('potholes')) for (const f of [0.2, 0.5, 0.8]) add(k0 + Math.floor(n * f), 'pothole', (rnd() * 2 - 1) * 0.7);
+      if (feats.includes('barrels')) {
         add(k0 + Math.floor(n * 0.3), 'barrel', -0.62); add(k0 + Math.floor(n * 0.3), 'barrel', -0.2); // gap on the right
         add(k0 + Math.floor(n * 0.7), 'barrel', 0.62); add(k0 + Math.floor(n * 0.7), 'barrel', 0.2);   // gap on the left
+      }
+      if (feats.includes('parked')) for (let j = 1; j < n - 1; j += 2) if (rnd() < 0.85 && (k0 + j) * (SEG_LEN / UNIT) > 24) traffic.parked.push({ s: (k0 + j) * (SEG_LEN / UNIT) + 2, x: rnd() < 0.15 ? -0.93 : 0.93, type: pick(['suv', 'suv', 'sedan', 'van', 'suv']), color: pick(CAR_COLORS), door: rnd() < 0.6, pullOut: rnd() < 0.3 });
+      if (feats.includes('traffic')) for (const f of [0.25, 0.7]) traffic.moving.push({ s: (k0 + Math.floor(n * f)) * (SEG_LEN / UNIT), x: 0.5, type: pick(['suv', 'suv', 'sedan', 'van']), color: pick(CAR_COLORS), vs: 5.5 + rnd() * 2 });
+      if (feats.includes('junction')) {
+        const sj = (k0 + Math.floor(n / 2)) * (SEG_LEN / UNIT) + 2;
+        traffic.junctions.push({ s: sj });
+        decals.push({ type: 'crosswalk', s: sj - 5 }, { type: 'crosswalk', s: sj + 5 }, { type: 'signal', s: sj - 7, side: -1 }, { type: 'signal', s: sj - 7, side: 1 }, { type: 'signal', s: sj + 7, side: -1 }, { type: 'signal', s: sj + 7, side: 1 });
       }
       k0 += n;
     }
@@ -142,7 +183,7 @@
     // (stepped values made the bike jerk and the riders' lean flicker every 4 m).
     const lerpAt = (arr, s) => { const f = mod(s) / SEG_LEN - 0.5, i0 = Math.floor(f), t = f - i0; return arr[(i0 + N) % N] * (1 - t) + arr[(i0 + 1 + N) % N] * t; };
     return {
-      def, theme, N, segs, length, map, ys, trackLen: N * SEG_LEN, obstacles,
+      def, theme, N, segs, length, map, ys, trackLen: N * SEG_LEN, obstacles, decals, traffic,
       segIndex: idx,
       gradeAt(s) { return lerpAt(grade, s); },
       curveAt(s) { return lerpAt(deg, s); },
@@ -154,5 +195,5 @@
     };
   }
 
-  Object.assign(C, { UNIT, SEG_LEN, VEXAG, NARROW, OBSTACLE_RADIUS, COURSES, THEMES, buildTrack });
+  Object.assign(C, { VEHICLE_TYPES, CAR_COLORS, UNIT, SEG_LEN, VEXAG, NARROW, OBSTACLE_RADIUS, COURSES, THEMES, buildTrack });
 })();

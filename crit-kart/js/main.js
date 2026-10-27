@@ -391,6 +391,12 @@
       else if (e.type === 'obstacle' && mine) {
         toast({ bump: 'Speed bump!', cone: 'Cone! Weave!', pothole: 'Pothole!', barrel: 'Barrel crash!' }[e.kind], '#ffd9a0', 1.4);
         play(e.kind === 'bump' ? 'bump' : 'clunk');
+      } else if (e.type === 'vehicle' && mine) {
+        toast(e.kind === 'door' ? 'DOORED!' : e.vehicle.mode === 'cross' ? 'T-boned by a crossing car!' : e.vehicle.type === 'suv' ? 'Clipped by an SUV!' : 'Clipped by a car!', '#ff9a9a', 2); play('hit'); play('horn');
+      } else if (e.type === 'vehicle' && !mine && e.vehicle.mode === 'cross') toast(`${e.rider.name} hit a crossing car!`, '#ffd7e8', 1.6);
+      else if (e.type === 'horn') { const d = (((e.vehicle.s - race.player.s) % race.length) + race.length * 1.5) % race.length - race.length / 2; if (d > -20 && d < 110) play('horn'); }
+      else if (e.type === 'bell') { toast('BELL LAP!', '#ffe066', 2.6); play('bell');
+      } else if (e.type === 'sprint') { toast('SPRINT! 300 m to go', '#ff8787', 2.6); play('sprintCall');
       } else if (e.type === 'incoming') { state.incoming = 3; play('incoming'); }
       else if (e.type === 'notarget') toast('No target ahead', '#ccc');
       else if (e.type === 'lap') {
