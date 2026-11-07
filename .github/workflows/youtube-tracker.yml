@@ -33,6 +33,16 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.12" }
       - run: pip install requests
+      - name: Start from the data currently on the site
+        # videos.json isn't committed, so the repo copy is old. The live copy gives exact upload
+        # dates for known videos and a recent fallback for any channel YouTube fails to return.
+        run: |
+          url="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/videos.json"
+          if curl -fsSL "$url" -o "$RUNNER_TEMP/live.json" && python -c "import json,sys; json.load(open(sys.argv[1]))" "$RUNNER_TEMP/live.json"; then
+            cp "$RUNNER_TEMP/live.json" youtube-tracker/videos.json && echo "Using the live site's data"
+          else
+            echo "Live data not available; using the copy in the repo"
+          fi
       - run: python youtube-tracker/fetch_videos.py
       - name: Save newly found channel IDs
         # videos.json is published straight to the site, not committed: committing it

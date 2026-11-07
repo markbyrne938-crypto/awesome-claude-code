@@ -1,0 +1,18 @@
+name: probe
+# Temporary: run the tracker's fetcher on this branch without publishing.
+on:
+  push:
+    branches: [claude/youtube-channel-tracker-g5iqmt]
+    paths: [".github/workflows/probe.yml", "youtube-tracker/**"]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install requests
+      - run: |
+          url="https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/videos.json"
+          curl -fsSL "$url" -o youtube-tracker/videos.json && echo "using live data" || echo "no live data"
+      - run: python youtube-tracker/fetch_videos.py
+      - run: python youtube-tracker/diag/probe.py

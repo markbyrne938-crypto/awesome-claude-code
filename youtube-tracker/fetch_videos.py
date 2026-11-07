@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Fetch the newest videos for each channel in channels.json -> videos.json.
 
-Uses only YouTube's public RSS feeds and playlist pages (no API key). Channel IDs are
+Uses only YouTube's public RSS feeds and playlist pages (no API key); if a channel's feed
+fails, its uploads playlist is used instead. Channel IDs are
 looked up once by name and cached back into channels.json as "id"; to fix a
 wrong match, put the right "id" (UC...) in channels.json yourself.
 """
 import json
 import re
 import sys
+import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -123,18 +125,69 @@ def _badge_text(o):
     return None
 
 
-def parse_playlist(html):
-    """Map video id -> length in seconds (None if unknown) from a playlist page."""
+RELATIVE = re.compile(r"(\d+|an?|one)\s+(second|minute|hour|day|week|month|year)s?\s+ago", re.I)
+UNIT_SECONDS = {"second": 1, "minute": 60, "hour": 3600, "day": 86400, "week": 604800,
+                "month": 2629800, "year": 31557600}
+
+
+def relative_to_iso(text, now):
+    """'5 hours ago' -> ISO timestamp (approximate); None if the text has no age in it."""
+    m = RELATIVE.search(text or "")
+    if not m:
+        return None
+    n = 1 if m.group(1).lower() in ("a", "an", "one") else int(m.group(1))
+    return (now - timedelta(seconds=n * UNIT_SECONDS[m.group(2).lower()])).isoformat(timespec="seconds")
+
+
+def _strings(o):
+    if isinstance(o, str):
+        yield o
+    elif isinstance(o, dict):
+        for v in o.values():
+            yield from _strings(v)
+    elif isinstance(o, list):
+        for v in o:
+            yield from _strings(v)
+
+
+def _lockup_title(lv):
+    def find(o):
+        if isinstance(o, dict):
+            meta = o.get("lockupMetadataViewModel")
+            if isinstance(meta, dict):
+                t = meta.get("title")
+                return t.get("content") if isinstance(t, dict) else t
+            for v in o.values():
+                r = find(v)
+                if r:
+                    return r
+        elif isinstance(o, list):
+            for v in o:
+                r = find(v)
+                if r:
+                    return r
+        return None
+    return find(lv)
+
+
+def parse_playlist_items(html):
+    """Videos on a playlist page, in page order (newest first for uploads):
+    [{"id", "title", "seconds", "ago"}]; "ago" is text like '5 hours ago' (or None)."""
     m = re.search(r"var ytInitialData = (\{.*?\});</script>", html, re.S)
     if not m:
         raise RuntimeError("playlist page format not recognised")
-    found = {}
+    items, seen = [], set()
 
     def walk(o):
         if isinstance(o, dict):
             lv = o.get("lockupViewModel")
             if isinstance(lv, dict) and lv.get("contentId"):
-                found[lv["contentId"]] = parse_duration(_badge_text(lv))
+                vid = lv["contentId"]
+                if vid not in seen:
+                    seen.add(vid)
+                    ago = next((t for t in _strings(lv) if RELATIVE.search(t)), None)
+                    items.append({"id": vid, "title": _lockup_title(lv),
+                                  "seconds": parse_duration(_badge_text(lv)), "ago": ago})
             for v in o.values():
                 walk(v)
         elif isinstance(o, list):
@@ -142,7 +195,37 @@ def parse_playlist(html):
                 walk(v)
 
     walk(json.loads(m.group(1)))
-    return found
+    return items
+
+
+def parse_playlist(html):
+    """Map video id -> length in seconds (None if unknown) from a playlist page."""
+    return {it["id"]: it["seconds"] for it in parse_playlist_items(html)}
+
+
+def feed_from_playlist(items, previous, now):
+    """Stand-in for the RSS feed built from the uploads playlist: exact dates where we already
+    know the video, otherwise the date worked out from '5 hours ago'."""
+    feed = []
+    for it in items:
+        published = previous.get(it["id"], {}).get("published") or relative_to_iso(it["ago"], now)
+        if published and it["title"]:
+            feed.append({"id": it["id"], "title": it["title"], "published": published})
+    return feed
+
+
+def get_feed(channel_id, attempts=3):
+    """The channel's RSS feed, retrying: YouTube sometimes answers 404/500 for a valid channel."""
+    for attempt in range(attempts):
+        try:
+            r = session.get("https://www.youtube.com/feeds/videos.xml",
+                            params={"channel_id": channel_id}, timeout=20)
+            r.raise_for_status()
+            return parse_feed(r.text)
+        except Exception:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(2 * (attempt + 1))
 
 
 def _playlist_html(channel_id, kind):
@@ -201,12 +284,13 @@ def main():
                 others = [f"'{t}' ({i})" for cid, t, i in candidates[:5] if cid != ch["id"]]
                 if others:
                     print(f"{name}:   other search results: " + "; ".join(others))
-            r = session.get("https://www.youtube.com/feeds/videos.xml",
-                            params={"channel_id": ch["id"]}, timeout=20)
-            r.raise_for_status()
-            lengths, shorts, lives = {}, set(), set()
+            try:
+                feed, feed_error = get_feed(ch["id"]), None
+            except Exception as exc:
+                feed, feed_error = None, exc
+            lengths, shorts, lives, uploads = {}, set(), set(), []
             for label, load in (
-                ("lengths", lambda: lengths.update(channel_playlist(ch["id"], "UULF"))),
+                ("lengths", lambda: uploads.extend(parse_playlist_items(_playlist_html(ch["id"], "UULF")))),
                 ("Shorts", lambda: shorts.update(parse_shorts(_playlist_html(ch["id"], "UUSH")))),
                 ("live streams", lambda: lives.update(channel_playlist(ch["id"], "UULV"))),
             ):
@@ -214,7 +298,12 @@ def main():
                     load()
                 except Exception as exc:  # no info for this list; still show the videos
                     print(f"{name}: could not read {label} list ({exc})", file=sys.stderr)
-            feed = parse_feed(r.text)
+            lengths.update({it["id"]: it["seconds"] for it in uploads})
+            if feed is None:
+                if not uploads:
+                    raise feed_error
+                feed = feed_from_playlist(uploads, previous, datetime.now(timezone.utc))
+                print(f"{name}: feed unavailable ({feed_error}); used the uploads list instead")
             if new_match and feed:
                 print(f"{name}:   newest upload: '{feed[0]['title']}' ({feed[0]['published'][:10]})")
             videos = []
