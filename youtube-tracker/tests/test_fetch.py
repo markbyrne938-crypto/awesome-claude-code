@@ -65,3 +65,39 @@ def test_channel_search_prefers_exact_name():
     assert pick_channel(found, "Ben Morris")[0] == "UC2"            # first exact name match wins
     assert pick_channel(found, "Steve Marsh")[0] == "UC1"           # no exact match: top result
     assert pick_channel([("UC9", "SteveMarsh", "")], "Steve Marsh")[0] == "UC9"   # spaces ignored
+
+
+def test_relative_to_iso():
+    from datetime import datetime, timezone
+    from fetch_videos import relative_to_iso
+    now = datetime(2026, 11, 7, 22, 0, tzinfo=timezone.utc)
+    assert relative_to_iso("5 hours ago", now) == "2026-11-07T17:00:00+00:00"
+    assert relative_to_iso("1 day ago", now) == "2026-11-06T22:00:00+00:00"
+    assert relative_to_iso("Streamed 2 weeks ago", now) == "2026-10-24T22:00:00+00:00"
+    assert relative_to_iso("an hour ago", now) == "2026-11-07T21:00:00+00:00"
+    assert relative_to_iso("1.2M views", now) is None
+
+
+def test_playlist_items_and_feed_fallback():
+    import json
+    from datetime import datetime, timezone
+    from fetch_videos import parse_playlist_items, feed_from_playlist
+    lv = lambda vid, title, dur, ago: {"lockupViewModel": {
+        "contentId": vid,
+        "contentImage": {"thumbnailViewModel": {"overlays": [{"thumbnailBottomOverlayViewModel": {
+            "badges": [{"thumbnailBadgeViewModel": {"text": dur}}]}}]}},
+        "metadata": {"lockupMetadataViewModel": {
+            "title": {"content": title},
+            "metadata": {"contentMetadataViewModel": {"metadataRows": [{"metadataParts": [
+                {"text": {"content": "1.2M views"}}, {"text": {"content": ago}}]}]}}}}}}
+    data = {"contents": [lv("newnewnew01", "Brand new video", "25:10", "5 hours ago"),
+                         lv("oldoldold01", "Older video", "1:02:03", "3 days ago")]}
+    items = parse_playlist_items(f"<script>var ytInitialData = {json.dumps(data)};</script>")
+    assert items == [
+        {"id": "newnewnew01", "title": "Brand new video", "seconds": 1510, "ago": "5 hours ago"},
+        {"id": "oldoldold01", "title": "Older video", "seconds": 3723, "ago": "3 days ago"}]
+    now = datetime(2026, 11, 7, 22, 0, tzinfo=timezone.utc)
+    previous = {"oldoldold01": {"published": "2026-11-04T18:00:05+00:00"}}   # exact date already known
+    assert feed_from_playlist(items, previous, now) == [
+        {"id": "newnewnew01", "title": "Brand new video", "published": "2026-11-07T17:00:00+00:00"},
+        {"id": "oldoldold01", "title": "Older video", "published": "2026-11-04T18:00:05+00:00"}]
