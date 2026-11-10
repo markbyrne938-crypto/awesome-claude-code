@@ -2,227 +2,370 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>My YouTube Watchlist</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📺</text></svg>">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta name="theme-color" content="#262a34">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Watchlist">
+<title>Watchlist</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
-  :root { --bg:#f4f5f7; --card:#fff; --text:#16181d; --muted:#656b76; --line:#e2e4e9; --accent:#e02b20; --accent-soft:#fde9e7; --ok:#1a8f4c; --ok-soft:#e5f6ec; }
+  :root {
+    --bg:#f3f4f6; --card:#ffffff; --text:#14161a; --muted:#646a75; --line:#e3e5ea;
+    --accent:#e02b20; --accent-soft:#fdeceb; --ok:#14894a; --ok-soft:#e3f5ea; --shadow:0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.06);
+  }
   @media (prefers-color-scheme: dark) {
-    :root { --bg:#0f1012; --card:#1a1b1e; --text:#eceef2; --muted:#9aa0ab; --line:#2b2d31; --accent:#ff5f54; --accent-soft:#3a1c1a; --ok:#4ccf86; --ok-soft:#14301f; }
+    :root { --bg:#0e0f11; --card:#1a1b1f; --text:#eceef2; --muted:#9aa0ab; --line:#2a2c31;
+      --accent:#ff5f54; --accent-soft:#3a1c1a; --ok:#4ccf86; --ok-soft:#14301f; --shadow:none; }
   }
   * { box-sizing:border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
-  header { background:var(--card); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:5; }
-  .bar { max-width:1100px; margin:0 auto; padding:10px 16px 6px; display:flex; flex-wrap:wrap; gap:8px 12px; align-items:center; }
-  h1 { font-size:20px; margin:0; }
-  .sub { color:var(--muted); font-size:13px; }
-  .grow { margin-right:auto; }
-  button, select, input[type=search] { font:inherit; font-size:14px; padding:8px 14px; border:1px solid var(--line); border-radius:999px; background:var(--card); color:var(--text); }
-  button { cursor:pointer; } button:hover { border-color:var(--accent); }
-  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
-  button:disabled { opacity:.6; cursor:wait; }
-  input[type=search] { flex:1 1 180px; min-width:0; border-radius:10px; }
-  .seg { display:inline-flex; } .seg input { display:none; }
-  .seg label { font-size:14px; padding:8px 14px; border:1px solid var(--line); margin-left:-1px; cursor:pointer; background:var(--card); }
-  .seg label:first-of-type { border-radius:999px 0 0 999px; margin:0; } .seg label:last-of-type { border-radius:0 999px 999px 0; }
-  .seg input:checked + label { background:var(--accent-soft); border-color:var(--accent); color:var(--accent); font-weight:600; position:relative; }
-  .toggle { display:flex; gap:6px; align-items:center; font-size:14px; color:var(--muted); cursor:pointer; }
-  .toggle input { accent-color:var(--accent); width:18px; height:18px; }
-  .chips { max-width:1100px; margin:0 auto; padding:2px 16px 12px; display:flex; gap:8px; overflow-x:auto; scrollbar-width:thin; }
-  .chip { flex:none; white-space:nowrap; padding:6px 12px; }
-  .chip.on { background:var(--accent); border-color:var(--accent); color:#fff; }
-  .chip small { opacity:.75; margin-left:4px; }
-  main { max-width:1100px; margin:0 auto; padding:16px; }
-  .group { margin-bottom:26px; }
-  .group h2 { font-size:17px; margin:0 0 10px; display:flex; align-items:baseline; gap:10px; }
-  .group h2 .link { margin-left:auto; font-size:13px; font-weight:400; color:var(--muted); background:none; border:none; padding:0; text-decoration:underline; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:16px; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; transition:opacity .2s; }
-  .card.watched { opacity:.5; }
-  .thumb { position:relative; display:block; aspect-ratio:16/9; background:var(--line); }
+  html, body { margin:0; }
+  body { background:var(--bg); color:var(--text); font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; -webkit-font-smoothing:antialiased; }
+  button, input, select { font:inherit; color:inherit; }
+  button { cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  a { color:inherit; }
+  [hidden] { display:none !important; }
+
+  /* ---------- lock / setup screens ---------- */
+  .gate { min-height:100vh; min-height:100dvh; display:grid; place-items:center; padding:24px 16px; }
+  .gate-card { width:min(380px,100%); background:var(--card); border:1px solid var(--line); border-radius:20px; padding:28px 24px; box-shadow:var(--shadow); text-align:center; }
+  .gate-card img { width:64px; height:64px; border-radius:16px; }
+  .gate-card h1 { font-size:22px; margin:14px 0 4px; }
+  .gate-card p { color:var(--muted); margin:0 0 18px; font-size:15px; }
+  .gate-card input[type=password] { width:100%; padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:var(--bg); font-size:16px; }
+  .gate-card label.remember { display:flex; gap:8px; align-items:center; justify-content:center; margin:12px 0 16px; color:var(--muted); font-size:14px; }
+  .gate-card .err { color:var(--accent); font-size:14px; min-height:20px; margin-top:10px; }
+  .gate-card ol { text-align:left; color:var(--muted); font-size:14px; padding-left:20px; margin:0; }
+  .gate-card ol li { margin:6px 0; }
+  .btn { border:1px solid var(--line); background:var(--card); border-radius:999px; padding:9px 16px; font-size:15px; font-weight:500; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .btn.wide { width:100%; padding:12px; border-radius:12px; }
+  .btn:disabled { opacity:.6; cursor:progress; }
+
+  /* ---------- app bar ---------- */
+  header { position:sticky; top:0; z-index:5; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:saturate(1.4) blur(12px); -webkit-backdrop-filter:saturate(1.4) blur(12px); border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top); }
+  .bar { max-width:1080px; margin:0 auto; padding:10px 16px; display:flex; align-items:center; gap:10px; }
+  .bar h1 { font-size:20px; margin:0; letter-spacing:-.01em; }
+  .bar .sub { color:var(--muted); font-size:13px; }
+  .bar .sub.stale { color:var(--accent); }
+  .grow { flex:1; min-width:0; }
+  .icon-btn { width:40px; height:40px; border-radius:50%; border:1px solid var(--line); background:var(--card); display:grid; place-items:center; font-size:18px; flex:none; }
+  .icon-btn.spin span { display:inline-block; animation:spin 1s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  main { max-width:1080px; margin:0 auto; padding:16px 16px 40px; }
+  .banner { display:flex; gap:12px; align-items:flex-start; background:var(--card); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:12px; padding:12px 14px; margin-bottom:16px; font-size:14px; }
+  .banner .grow p { margin:0 0 4px; }
+  .banner button { background:none; border:none; color:var(--muted); font-size:20px; line-height:1; padding:0 4px; }
+
+  /* ---------- hero ---------- */
+  .hero { display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden; box-shadow:var(--shadow); margin-bottom:22px; }
+  .hero .thumb { aspect-ratio:16/9; }
+  .hero .info { padding:18px 20px; display:flex; flex-direction:column; gap:10px; justify-content:center; }
+  .hero .eyebrow { font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--accent); }
+  .hero .title { font-size:20px; line-height:1.3; -webkit-line-clamp:3; }
+  .hero .actions { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; }
+  @media (max-width:640px) { .hero { grid-template-columns:1fr; } .hero .info { padding:14px 16px 16px; } .hero .title { font-size:18px; } }
+
+  /* ---------- controls ---------- */
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-bottom:10px; }
+  .search { flex:1 1 200px; min-width:0; padding:9px 14px; border:1px solid var(--line); border-radius:999px; background:var(--card); }
+  .seg { display:inline-flex; background:var(--card); border:1px solid var(--line); border-radius:999px; padding:3px; }
+  .seg button { border:none; background:none; border-radius:999px; padding:6px 12px; font-size:14px; color:var(--muted); }
+  .seg button.on { background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  select.len { padding:8px 12px; border:1px solid var(--line); border-radius:999px; background:var(--card); font-size:14px; }
+  .chips { display:flex; gap:8px; overflow-x:auto; padding:2px 0 12px; scrollbar-width:none; }
+  .chips::-webkit-scrollbar { display:none; }
+  .chip { flex:none; display:flex; align-items:center; gap:7px; border:1px solid var(--line); background:var(--card); border-radius:999px; padding:4px 12px 4px 4px; font-size:14px; white-space:nowrap; }
+  .chip.all { padding-left:12px; }
+  .chip.on { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); font-weight:600; }
+  .chip .n { color:var(--muted); font-size:12px; }
+  .avatar { width:26px; height:26px; border-radius:50%; display:grid; place-items:center; color:#fff; font-size:11px; font-weight:700; flex:none; letter-spacing:.02em; }
+  .avatar.lg { width:32px; height:32px; font-size:12px; }
+
+  /* ---------- feed ---------- */
+  .group { margin:18px 0 6px; }
+  .group h2 { font-size:15px; font-weight:700; margin:0 0 10px; display:flex; align-items:center; gap:8px; }
+  .group h2 .sub { color:var(--muted); font-weight:400; font-size:13px; }
+  .group h2 .link { margin-left:auto; font-size:13px; font-weight:500; color:var(--muted); background:none; border:none; padding:0; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; overflow:hidden; display:flex; flex-direction:column; box-shadow:var(--shadow); transition:opacity .25s, transform .25s; }
+  .card.leaving { opacity:0; transform:scale(.97); }
+  .thumb { position:relative; display:block; aspect-ratio:16/9; background:var(--line); overflow:hidden; }
   .thumb img { width:100%; height:100%; object-fit:cover; display:block; }
-  .dur { position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.82); color:#fff; font-size:12px; font-weight:600; padding:2px 6px; border-radius:6px; }
-  .new { position:absolute; left:8px; top:8px; background:var(--accent); color:#fff; font-size:11px; font-weight:700; letter-spacing:.04em; padding:2px 7px; border-radius:6px; }
-  .body { padding:12px 14px 14px; display:flex; flex-direction:column; gap:6px; flex:1; }
-  .chan { font-size:13px; font-weight:600; color:var(--accent); }
-  .title { color:inherit; text-decoration:none; font-weight:600; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-  .title:hover { color:var(--accent); }
-  .meta { color:var(--muted); font-size:13px; }
-  .tick { margin-top:auto; display:flex; align-items:center; gap:10px; padding:11px 12px; border:1.5px solid var(--line); border-radius:10px; cursor:pointer; font-size:15px; font-weight:500; user-select:none; -webkit-tap-highlight-color:transparent; }
-  .tick:hover { border-color:var(--ok); }
-  .tick input { width:24px; height:24px; accent-color:var(--ok); cursor:pointer; margin:0; }
-  .card.watched .tick { border-color:var(--ok); background:var(--ok-soft); color:var(--ok); }
+  .dur { position:absolute; right:8px; bottom:8px; background:rgba(0,0,0,.8); color:#fff; font-size:12px; font-weight:600; padding:2px 6px; border-radius:6px; }
+  .new { position:absolute; left:8px; top:8px; background:var(--accent); color:#fff; font-size:11px; font-weight:800; letter-spacing:.05em; padding:2px 7px; border-radius:6px; }
+  .body { padding:12px 14px 12px; display:flex; flex-direction:column; gap:8px; flex:1; }
+  .who { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); min-width:0; }
+  .who b { color:var(--text); font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .title { color:inherit; text-decoration:none; font-weight:650; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .row { display:flex; align-items:center; gap:8px; margin-top:auto; }
+  .row .meta { color:var(--muted); font-size:13px; flex:1; min-width:0; }
+  .tick { display:inline-flex; align-items:center; gap:6px; border:1.5px solid var(--line); background:var(--card); border-radius:999px; padding:6px 12px 6px 9px; font-size:14px; font-weight:600; flex:none; }
+  .tick .c { width:18px; height:18px; border-radius:50%; border:2px solid currentColor; display:grid; place-items:center; font-size:11px; line-height:1; }
+  .tick.done { background:var(--ok-soft); border-color:var(--ok); color:var(--ok); }
   .empty { background:var(--card); border:1px dashed var(--line); border-radius:14px; padding:28px 16px; text-align:center; color:var(--muted); }
-  .empty.big { padding:48px 16px; } .empty b { color:var(--text); font-size:18px; display:block; margin-bottom:6px; }
-  .empty button { margin-top:12px; }
+  .empty b { display:block; color:var(--text); font-size:18px; margin-bottom:4px; }
   .err { color:var(--accent); }
-  .toast { position:fixed; left:50%; bottom:20px; transform:translate(-50%,80px); background:#222; color:#fff; padding:10px 14px; border-radius:12px; display:flex; gap:14px; align-items:center; opacity:0; transition:.25s; z-index:9; max-width:92vw; pointer-events:none; }
+
+  details.watched { margin-top:28px; background:var(--card); border:1px solid var(--line); border-radius:14px; }
+  details.watched summary { padding:12px 16px; cursor:pointer; font-weight:600; list-style:none; display:flex; justify-content:space-between; }
+  details.watched summary::-webkit-details-marker { display:none; }
+  details.watched summary::after { content:"▾"; color:var(--muted); }
+  details.watched[open] summary::after { content:"▴"; }
+  .wl { list-style:none; margin:0; padding:0 8px 8px; }
+  .wl li { display:flex; align-items:center; gap:10px; padding:8px; border-top:1px solid var(--line); font-size:14px; }
+  .wl img { width:72px; aspect-ratio:16/9; object-fit:cover; border-radius:6px; flex:none; }
+  .wl .t { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ---------- menu sheet ---------- */
+  dialog { border:none; border-radius:20px; padding:0; background:var(--card); color:var(--text); width:min(460px,94vw); box-shadow:0 20px 60px rgba(0,0,0,.3); }
+  dialog::backdrop { background:rgba(0,0,0,.45); }
+  .sheet { padding:20px; }
+  .sheet h3 { margin:0 0 6px; font-size:16px; }
+  .sheet section + section { border-top:1px solid var(--line); margin-top:16px; padding-top:16px; }
+  .sheet p { color:var(--muted); font-size:14px; margin:0 0 10px; }
+  .sheet .field { width:100%; font:13px ui-monospace,Menlo,monospace; padding:9px 10px; border:1px solid var(--line); border-radius:10px; background:var(--bg); }
+  .sheet textarea.field { resize:vertical; }
+  .sheet .rowb { display:flex; gap:8px; align-items:center; margin-top:8px; flex-wrap:wrap; }
+  .sheet .ok { color:var(--ok); font-size:13px; }
+  .sheet .close { float:right; background:none; border:none; font-size:22px; color:var(--muted); line-height:1; }
+
+  .toast { position:fixed; left:50%; bottom:calc(20px + env(safe-area-inset-bottom)); transform:translate(-50%,80px); background:#1f2023; color:#fff; padding:10px 16px; border-radius:12px; display:flex; gap:14px; align-items:center; opacity:0; transition:.25s; z-index:9; max-width:92vw; pointer-events:none; box-shadow:0 8px 24px rgba(0,0,0,.25); }
   .toast.show { transform:translate(-50%,0); opacity:1; pointer-events:auto; }
-  .toast button { background:none; border:none; color:#ffb4ae; padding:0; font-weight:600; }
-  .warn { background:var(--accent-soft); color:var(--accent); padding:10px 16px; text-align:center; font-size:14px; }
-  dialog { border:1px solid var(--line); border-radius:16px; background:var(--card); color:var(--text); max-width:min(480px,92vw); padding:18px; }
-  dialog::backdrop { background:rgba(0,0,0,.5); }
-  dialog h3 { margin:0 0 6px; font-size:16px; } dialog h3:not(:first-child) { margin-top:16px; }
-  dialog textarea { width:100%; font:13px/1.3 ui-monospace,monospace; padding:8px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); resize:vertical; }
-  dialog .row { display:flex; gap:10px; align-items:center; margin-top:8px; }
-  footer { text-align:center; color:var(--muted); font-size:12px; padding:10px 16px 30px; }
+  .toast button { background:none; border:none; color:#ffb4ae; padding:0; font-weight:700; }
+  footer { text-align:center; color:var(--muted); font-size:12px; padding:0 16px calc(28px + env(safe-area-inset-bottom)); }
+
+  /* hover effects only where there is a mouse: on touch screens they stick after a tap */
+  @media (hover:hover) {
+    .btn:hover, .icon-btn:hover { border-color:var(--accent); }
+    .title:hover { color:var(--accent); }
+    .tick:hover { border-color:var(--ok); color:var(--ok); }
+  }
+
   @media (max-width:560px) {
-    header { position:static; }
-    .grid { grid-template-columns:1fr; }
-    .card { flex-direction:row; } .thumb { width:132px; aspect-ratio:16/9; flex:none; align-self:flex-start; }
-    .card .body { padding:10px 12px; } .tick { padding:9px 10px; font-size:14px; }
-    .card { flex-wrap:wrap; } .card .body { flex:1 1 0; min-width:0; }
+    .bar h1 { font-size:18px; }
+    .grid { grid-template-columns:1fr; gap:10px; }
+    .grid .card { flex-direction:row; }
+    .grid .thumb { width:140px; flex:none; align-self:stretch; aspect-ratio:auto; min-height:80px; }
+    .grid .body { padding:9px 11px; gap:5px; }
+    .grid .who .avatar { display:none; }
+    .grid .title { font-size:15px; }
+    .grid .row { flex-wrap:wrap; }
+    .grid .tick { padding:5px 10px 5px 7px; font-size:13px; }
   }
 </style>
 </head>
 <body>
-<header>
-  <div class="bar">
-    <div class="grow"><h1>📺 My YouTube Watchlist</h1><div class="sub" id="status">Loading…</div></div>
-    <button id="backupBtn" title="Sync your ticks between devices, or back them up">☁ Sync</button>
-    <button id="refresh" class="primary">↻ Refresh</button>
+
+<!-- Shown until the page is unlocked. Nothing private is in the page itself: the data is
+     fetched encrypted and only decrypted in this browser with your password. -->
+<div class="gate" id="lock" hidden>
+  <form class="gate-card" id="lockForm" autocomplete="on">
+    <img src="icon-192.png" alt="">
+    <h1>Watchlist</h1>
+    <p>This page is private. Enter your password to open it.</p>
+    <input type="text" name="username" value="watchlist" autocomplete="username" hidden>
+    <input type="password" id="pw" name="password" autocomplete="current-password" placeholder="Password" required>
+    <label class="remember"><input type="checkbox" id="remember" checked> Remember me on this device</label>
+    <button class="btn primary wide" id="unlockBtn" type="submit">Unlock</button>
+    <div class="err" id="lockErr" role="alert"></div>
+  </form>
+</div>
+
+<div class="gate" id="setup" hidden>
+  <div class="gate-card">
+    <img src="icon-192.png" alt="">
+    <h1>Almost ready</h1>
+    <p>Your watchlist is now encrypted. Choose a password to finish setting it up:</p>
+    <ol>
+      <li>In your GitHub repo, open <b>Settings → Secrets and variables → Actions</b>.</li>
+      <li>Tap <b>New repository secret</b>. Name: <b>TRACKER_PASSWORD</b>. Secret: your password.</li>
+      <li>Open the <b>Actions</b> tab → <b>YouTube tracker website</b> → <b>Run workflow</b>.</li>
+      <li>Come back here in a minute and unlock with that password.</li>
+    </ol>
   </div>
-  <div class="bar">
-    <input type="search" id="search" placeholder="Search videos or channels…" aria-label="Search">
-    <div class="seg" role="radiogroup" aria-label="Layout">
-      <input type="radio" name="view" id="v-new" value="new" checked><label for="v-new">Newest first</label>
-      <input type="radio" name="view" id="v-channel" value="channel"><label for="v-channel">By channel</label>
+</div>
+
+<div id="app" hidden>
+  <header>
+    <div class="bar">
+      <div class="grow"><h1>📺 Watchlist</h1><div class="sub" id="status">Loading…</div></div>
+      <button class="icon-btn" id="refresh" title="Check for new data" aria-label="Refresh"><span>↻</span></button>
+      <button class="icon-btn" id="menuBtn" title="Menu" aria-label="Menu">⋯</button>
     </div>
-    <select id="length" aria-label="Video length">
-      <option value="any">Any length</option><option value="short">Under 15 min</option>
-      <option value="medium">15–45 min</option><option value="long">Over 45 min</option>
-    </select>
-    <label class="toggle"><input type="checkbox" id="showWatched"> Show watched</label>
+  </header>
+  <main>
+    <div id="notes"></div>
+    <div id="hero"></div>
+    <div class="controls">
+      <input class="search" type="search" id="search" placeholder="Search videos or channels" aria-label="Search">
+      <div class="seg" role="group" aria-label="Layout">
+        <button data-view="new">Newest</button><button data-view="channel">By channel</button>
+      </div>
+      <select class="len" id="length" aria-label="Video length">
+        <option value="any">Any length</option><option value="short">Under 15 min</option>
+        <option value="medium">15–45 min</option><option value="long">Over 45 min</option>
+      </select>
+    </div>
+    <div class="chips" id="chips"></div>
+    <div id="list"></div>
+    <details class="watched" id="watchedBox"><summary>Recently watched</summary><ul class="wl" id="watchedList"></ul></details>
+  </main>
+  <footer><span id="syncStatus"></span><br>Checks for new uploads about every 10–25 minutes, 8am–10pm.</footer>
+</div>
+
+<dialog id="menu">
+  <div class="sheet">
+    <button class="close" id="closeMenu" aria-label="Close">×</button>
+    <section>
+      <h3>Use on your other devices</h3>
+      <p>Open this exact address on another device (or add it to your Home Screen) and unlock with your password. Your ticks follow you.</p>
+      <input class="field" id="syncLink" readonly>
+      <div class="rowb"><button class="btn" id="copyLink">Copy address</button><span class="ok" id="linkCopied"></span></div>
+    </section>
+    <section>
+      <h3>Backup code</h3>
+      <p>A copy of your watched list. Paste it under Restore to bring the ticks back.</p>
+      <textarea class="field" id="code" rows="3" readonly></textarea>
+      <div class="rowb"><button class="btn" id="copyCode">Copy code</button><span class="ok" id="codeCopied"></span></div>
+      <textarea class="field" id="restoreCode" rows="2" placeholder="Paste a backup code to restore" style="margin-top:10px"></textarea>
+      <div class="rowb"><button class="btn" id="restore">Restore</button><span class="ok" id="restored"></span></div>
+    </section>
+    <section>
+      <h3>Lock</h3>
+      <p>Forget the password on this device. You'll need it to open the page again.</p>
+      <button class="btn" id="lockBtn">🔒 Lock this device</button>
+    </section>
   </div>
-  <div class="chips" id="chips"></div>
-</header>
-<div id="warn" class="warn" hidden>⚠️ This browser isn't saving your ticks (private browsing?). Use a normal tab, or tap Backup to save them.</div>
-<main id="list"></main>
-<dialog id="backup">
-  <h3>Sync across devices</h3>
-  <p class="sub">Your ticks are saved online under a private random code that is part of this page's address. <b>Bookmark this exact address</b> (or add it to your Home Screen). Open it on any device to see the same ticks, even if the browser forgets its data.</p>
-  <input id="syncLink" readonly style="width:100%;font:13px ui-monospace,monospace;padding:8px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)">
-  <div class="row"><button id="copyLink" class="primary">Copy address</button><span class="sub" id="linkCopied"></span></div>
-  <h3>Backup code</h3>
-  <p class="sub">Your ticks live in this browser. To move them to another device or browser (or keep a safety copy), copy this code and paste it into Backup → Restore there.</p>
-  <textarea id="code" readonly rows="4"></textarea>
-  <div class="row"><button id="copy" class="primary">Copy code</button><span class="sub" id="copied"></span></div>
-  <h3>Restore</h3>
-  <textarea id="restoreCode" rows="3" placeholder="Paste a backup code here"></textarea>
-  <div class="row"><button id="restore">Restore</button><span class="sub" id="restored"></span><button id="closeBackup" style="margin-left:auto">Close</button></div>
 </dialog>
-<footer>Ticks are saved on this device and synced online (tap ☁ Sync). New uploads are checked about every 10–25 minutes from 8am to 10pm.<br><span id="syncStatus"></span></footer>
-<div class="toast" id="toast"><span id="toastMsg"></span><button id="undo">Undo</button></div>
+
+<div class="toast" id="toast" role="status"><span id="toastMsg"></span><button id="undo">Undo</button></div>
+
 <script>
+'use strict';
 const $ = id => document.getElementById(id);
-let watched = new Set(), data = { channels: [] }, prefs = { view: 'new', filter: 'all', length: 'any' }, lastAction = null, toastTimer;
-const WKEY = 'yt-watched', MKEY = 'yt-marks', SKEY = 'yt-sync-key', KEEP_MS = 90 * 864e5;
-// Every tick/untick is a "mark": id -> [1 = watched / 0 = not, time ms]. The latest change wins, on any device.
-const marks = new Map();
-function readWatched() { try { return JSON.parse(localStorage.getItem(WKEY) || '[]'); } catch (e) { return []; } }
-function loadMarks() {
-  try { for (const [id, w, t] of JSON.parse(localStorage.getItem(MKEY) || '[]')) marks.set(id, [w, t]); } catch (e) {}
-  for (const id of readWatched()) if (!marks.has(id)) marks.set(id, [1, 1]);   // ticks saved by older versions
-  rebuildWatched();
-}
-function rebuildWatched() { watched = new Set([...marks].filter(([, m]) => m[0]).map(([id]) => id)); }
-function mark(id, on) { marks.set(id, [on ? 1 : 0, Date.now()]); on ? watched.add(id) : watched.delete(id); }
-function mergeMarks(list) {   // list of [id, w, t]; true if anything here was newer than what we had
-  let changed = false;
-  for (const [id, w, t] of list) { const cur = marks.get(id); if (!cur || t > cur[1]) { marks.set(id, [w, t]); changed = true; } }
-  if (changed) rebuildWatched();
-  return changed;
-}
-loadMarks();
-try { Object.assign(prefs, JSON.parse(localStorage.getItem('yt-prefs') || '{}')); } catch (e) {}
-let storageOk = true;
-function saveLocal() {
-  const cutoff = Date.now() - KEEP_MS;
-  for (const [id, m] of marks) if (m[1] > 1 && m[1] < cutoff) marks.delete(id);   // forget marks for long-gone videos
-  try {
-    localStorage.setItem(MKEY, JSON.stringify([...marks].map(([id, m]) => [id, m[0], m[1]])));
-    localStorage.setItem(WKEY, JSON.stringify([...watched]));
-    storageOk = JSON.parse(localStorage.getItem(MKEY)).length === marks.size;
-  } catch (e) { storageOk = false; }
-  $('warn').hidden = storageOk;
-  // Ask the browser not to evict our data (helps on Chrome/Firefox/newer Safari).
-  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
-}
-function saveWatched() { saveLocal(); syncSoon(); }
+const store = {   // storage that never throws (private mode, blocked storage, ...)
+  get(k, area = localStorage) { try { return area.getItem(k); } catch (e) { return null; } },
+  set(k, v, area = localStorage) { try { area.setItem(k, v); return true; } catch (e) { return false; } },
+  del(k) { try { localStorage.removeItem(k); sessionStorage.removeItem(k); } catch (e) {} },
+};
 
-// ---- Online sync: the marks are also kept in a free anonymous text store under a long random key ----
-// The key lives in the page address (#k=...) and in localStorage, so a bookmark / home-screen icon of the
-// address survives cleared browser data, and opening the same address elsewhere shares the ticks.
-const SYNC_URL = 'https://textdb.dev/api/data/';
-let syncKey = null, syncing = false, syncAgain = false, syncTimer, syncState = 'off';
-function initSyncKey() {
-  const m = location.hash.match(/[#&]k=([\w-]{16,64})/);
-  let k = m && m[1];
-  try { if (!k) k = localStorage.getItem(SKEY); } catch (e) {}
-  if (!k || !/^[\w-]{16,64}$/.test(k)) {
-    const a = new Uint8Array(18); crypto.getRandomValues(a);
-    k = 'yt' + btoa(String.fromCharCode(...a)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+/* ================= encryption (must match tracker_crypto.py) ================= */
+const DATA_SALT = new TextEncoder().encode('yt-watchlist/data/v1'), ITERATIONS = 600000;
+const b64 = bytes => btoa(String.fromCharCode(...new Uint8Array(bytes)));
+const unb64 = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
+async function deriveRawKey(password) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  return new Uint8Array(await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: DATA_SALT, iterations: ITERATIONS }, base, 256));
+}
+const aesKey = raw => crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+async function decryptEnvelope(key, env) {
+  const plain = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: unb64(env.iv) }, key, unb64(env.ct));
+  return JSON.parse(new TextDecoder().decode(plain));
+}
+async function encryptText(key, text) {   // "enc1:" + base64(iv || ciphertext)
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text)));
+  const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+  return 'enc1:' + b64(out);
+}
+async function decryptText(key, text) {
+  const all = unb64(text.slice(5));
+  return new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: all.slice(0, 12) }, key, all.slice(12)));
+}
+
+/* ================= state ================= */
+let key = null, data = { channels: [], notes: [] }, envelope = null, lastAction = null, toastTimer;
+let watched = new Set();
+const prefs = { view: 'new', filter: 'all', length: 'any' };
+try { Object.assign(prefs, JSON.parse(store.get('yt-prefs') || '{}')); } catch (e) {}
+const savePrefs = () => store.set('yt-prefs', JSON.stringify(prefs));
+
+/* ================= unlock ================= */
+async function fetchData() {
+  const r = await fetch('data.json', { cache: 'no-store' });
+  if (!r.ok) throw new Error('data ' + r.status);
+  return r.json();
+}
+function show(id) { for (const s of ['lock', 'setup', 'app']) $(s).hidden = s !== id; }
+async function boot() {
+  try { envelope = await fetchData(); }
+  catch (e) { show('lock'); $('lockErr').textContent = "Couldn't load the page data. Check your connection and reload."; return; }
+  if (envelope.setup_required) { show('setup'); return; }
+  const saved = store.get('yt-key') || store.get('yt-key', sessionStorage);
+  if (saved) {
+    try { key = await aesKey(unb64(saved)); await openData(); return; }
+    catch (e) { store.del('yt-key'); key = null; $('lockErr').textContent = 'Your password has changed. Enter the new one.'; }
   }
-  try { localStorage.setItem(SKEY, k); } catch (e) {}
-  try { history.replaceState(null, '', location.pathname + location.search + '#k=' + k); } catch (e) {}
-  syncKey = k;
+  show('lock'); setTimeout(() => $('pw').focus(), 50);
 }
-const serializeMarks = () => [...marks].map(([id, m]) => `${id},${m[0]},${m[1]}`).join('\n');
-function parseMarks(text) {
-  return text.split('\n').map(l => l.trim().split(',')).filter(p => /^[\w-]{11}$/.test(p[0]) && /^[01]$/.test(p[1]) && /^\d+$/.test(p[2]))
-    .map(p => [p[0], +p[1], +p[2]]);
-}
-function setSync(state) {
-  syncState = state;
-  const el = $('syncStatus'); if (!el) return;
-  el.textContent = state === 'ok' ? '☁ Ticks synced online' : state === 'error' ? "☁ Couldn't reach the sync service — ticks are still saved on this device" : '';
-  $('syncLink').value = location.href;
-}
-async function syncNow() {
-  if (!syncKey || location.protocol === 'file:') return;
-  if (syncing) { syncAgain = true; return; }
-  syncing = true;
+$('lockForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const btn = $('unlockBtn'); btn.disabled = true; btn.textContent = 'Unlocking…'; $('lockErr').textContent = '';
   try {
-    const r = await fetch(SYNC_URL + syncKey, { cache: 'no-store' });
-    if (!r.ok) throw new Error('get ' + r.status);
-    const remote = parseMarks(await r.text());
-    if (mergeMarks(remote)) { saveLocal(); render(); }
-    const theirs = new Map(remote.map(([id, w, t]) => [id, t]));
-    const dirty = [...marks].some(([id, m]) => !theirs.has(id) || theirs.get(id) < m[1]);
-    if (dirty) {
-      const p = await fetch(SYNC_URL + syncKey, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: serializeMarks() });
-      if (!p.ok) throw new Error('post ' + p.status);
-    }
-    setSync('ok');
-  } catch (e) { setSync('error'); }
-  syncing = false;
-  if (syncAgain) { syncAgain = false; syncSoon(); }
-}
-function syncSoon() { clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 1200); }
-const savePrefs = () => { try { localStorage.setItem('yt-prefs', JSON.stringify(prefs)); } catch (e) {} };
-// Another tab (or the home-screen app) ticked something: pick it up.
-window.addEventListener('storage', e => {
-  if (e.key === MKEY) {
-    try { if (mergeMarks(JSON.parse(e.newValue || '[]'))) render(); } catch (x) {}
+    if (!envelope || !envelope.ct) envelope = await fetchData();
+    const raw = await deriveRawKey($('pw').value);
+    const k = await aesKey(raw);
+    await decryptEnvelope(k, envelope);          // throws on a wrong password
+    key = k;
+    store.set('yt-key', b64(raw), $('remember').checked ? localStorage : sessionStorage);
+    $('pw').value = '';
+    await openData();
+  } catch (err) {
+    $('lockErr').textContent = err instanceof DOMException || err.name === 'OperationError' ? "That password didn't work." : "Couldn't unlock: " + err.message;
   }
+  btn.disabled = false; btn.textContent = 'Unlock';
 });
+async function openData() {
+  data = await decryptEnvelope(key, envelope);
+  trimOld();
+  show('app');
+  loadMarks(); initSyncKey(); render(); syncNow();
+}
+function lock() { store.del('yt-key'); key = null; data = { channels: [], notes: [] }; $('menu').close(); $('list').innerHTML = ''; $('hero').innerHTML = ''; show('lock'); }
+$('lockBtn').onclick = lock;
 
+async function reload() {
+  if (!key) return;
+  try { envelope = await fetchData(); if (envelope.setup_required) return show('setup'); data = await decryptEnvelope(key, envelope); trimOld(); render(); }
+  catch (e) { if (e.name === 'OperationError') return lock(); updateStatus(); }
+}
+function trimOld() {   // nothing older than a month (the updater drops them too; this covers old data)
+  const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 1);
+  for (const c of data.channels) c.videos = (c.videos || []).filter(v => new Date(v.published) >= cutoff);
+}
+
+/* ================= helpers ================= */
 const esc = s => { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; };
 const attr = s => esc(s).replace(/"/g, '&quot;');
-function dur(s) {
-  const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, '0');
-  return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`;
-}
+function dur(s) { const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = String(s % 60).padStart(2, '0'); return h ? `${h}:${String(m).padStart(2, '0')}:${x}` : `${m}:${x}`; }
+function total(s) { const h = Math.floor(s / 3600), m = Math.round(s % 3600 / 60); return h ? `${h} h ${m} m` : `${m} min`; }
 function ago(iso) {
   const mins = (Date.now() - new Date(iso)) / 60000;
-  for (const [u, n] of [['year',525600],['month',43800],['week',10080],['day',1440],['hour',60],['minute',1]])
+  for (const [u, n] of [['year', 525600], ['month', 43800], ['week', 10080], ['day', 1440], ['hour', 60], ['minute', 1]])
     if (mins >= n) { const v = Math.floor(mins / n); return `${v} ${u}${v > 1 ? 's' : ''} ago`; }
   return 'just now';
+}
+function shortAgo(iso) {   // for the status line: '8 min ago', '3 h ago', '2 d ago'
+  const m = Math.floor((Date.now() - new Date(iso)) / 60000);
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.floor(m / 60)} h ago` : `${Math.floor(m / 1440)} d ago`;
 }
 function dayGroup(iso) {
   const d = new Date(iso), now = new Date();
   const days = Math.round((new Date(now.getFullYear(), now.getMonth(), now.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
-  return days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 7 ? 'Earlier this week' : days < 31 ? 'Earlier this month' : 'Older';
+  return days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 7 ? 'Earlier this week' : 'Earlier this month';
+}
+function initials(name) {
+  const words = name.replace(/[_.,]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').split(/\s+/).filter(Boolean);
+  return ((words[0] || '?')[0] + (words.length > 1 ? words[words.length - 1][0] : (words[0] || '')[1] || '')).toUpperCase();
+}
+function avatar(name, cls = '') {
+  let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `<span class="avatar ${cls}" style="background:hsl(${h} 55% 42%)" aria-hidden="true">${esc(initials(name))}</span>`;
 }
 const isWatched = v => watched.has(v.id);
 const byNewest = (a, b) => new Date(b.published) - new Date(a.published);
@@ -231,119 +374,141 @@ function lengthOk(v) {
   const m = v.seconds / 60;
   return prefs.length === 'short' ? m < 15 : prefs.length === 'medium' ? m >= 15 && m <= 45 : m > 45;
 }
-function searchOk(v, chan) {
-  const q = $('search').value.trim().toLowerCase();
-  return !q || v.title.toLowerCase().includes(q) || chan.toLowerCase().includes(q);
-}
+function searchOk(v, chan) { const q = $('search').value.trim().toLowerCase(); return !q || v.title.toLowerCase().includes(q) || chan.toLowerCase().includes(q); }
+const allVideos = () => data.channels.flatMap(c => c.videos.map(v => ({ ...v, channel: c.name }))).sort(byNewest);
+
+/* ================= rendering ================= */
+const thumb = v => `<a class="thumb" href="${attr(v.url)}" target="_blank" rel="noopener noreferrer"><img loading="lazy" alt="" src="https://i.ytimg.com/vi/${attr(v.id)}/mqdefault.jpg">`
+  + (Date.now() - new Date(v.published) < 48 * 36e5 ? '<span class="new">NEW</span>' : '')
+  + (v.seconds != null ? `<span class="dur">${dur(v.seconds)}</span>` : '') + '</a>';
+const tickBtn = v => `<button class="tick" data-id="${attr(v.id)}" aria-label="Mark as watched"><span class="c">✓</span>Watched</button>`;
 
 function card(v, showChannel) {
-  const w = isWatched(v), fresh = !w && Date.now() - new Date(v.published) < 48 * 36e5;
-  return `<article class="card ${w ? 'watched' : ''}">
-    <a class="thumb" href="${attr(v.url)}" target="_blank" rel="noopener"><img loading="lazy" alt="" src="https://i.ytimg.com/vi/${attr(v.id)}/mqdefault.jpg">
-      ${fresh ? '<span class="new">NEW</span>' : ''}${v.seconds != null ? `<span class="dur">${dur(v.seconds)}</span>` : ''}</a>
-    <div class="body">
-      ${showChannel ? `<div class="chan">${esc(v.channel)}</div>` : ''}
-      <a class="title" href="${attr(v.url)}" target="_blank" rel="noopener">${esc(v.title)}</a>
-      <div class="meta">${ago(v.published)} · ${new Date(v.published).toLocaleDateString(undefined, {day:'numeric', month:'short', year:'numeric'})}</div>
-      <label class="tick"><input type="checkbox" data-id="${attr(v.id)}" ${w ? 'checked' : ''}> ${w ? 'Watched' : 'Mark as watched'}</label>
-    </div></article>`;
+  return `<article class="card" data-card="${attr(v.id)}">${thumb(v)}<div class="body">`
+    + (showChannel ? `<div class="who">${avatar(v.channel)}<b>${esc(v.channel)}</b></div>` : '')
+    + `<a class="title" href="${attr(v.url)}" target="_blank" rel="noopener noreferrer">${esc(v.title)}</a>`
+    + `<div class="row"><span class="meta">${ago(v.published)}</span>${tickBtn(v)}</div></div></article>`;
 }
 
 function render() {
-  const showAll = $('showWatched').checked, chans = data.channels;
-  document.querySelector(`input[name=view][value=${prefs.view}]`).checked = true;
+  if (!key) return;
+  document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.view === prefs.view));
   $('length').value = prefs.length;
-  if (!chans.some(c => c.videos.length || c.error)) {
-    $('chips').innerHTML = '';
-    $('list').innerHTML = `<div class="empty big"><b>No videos yet</b>The first automatic check hasn't run. Tap Refresh in a minute.<br><button onclick="location.reload()">Reload page</button></div>`;
-    return;
-  }
-  const left = c => c.videos.filter(v => !isWatched(v)).length;
-  const total = chans.reduce((n, c) => n + left(c), 0);
+  const chans = data.channels;
   if (prefs.filter !== 'all' && !chans.some(c => c.name === prefs.filter)) prefs.filter = 'all';
+  const left = c => c.videos.filter(v => !isWatched(v));
+  const unwatched = allVideos().filter(v => !isWatched(v));
 
-  $('chips').innerHTML = `<button class="chip ${prefs.filter === 'all' ? 'on' : ''}" data-f="all">All<small>${total}</small></button>` +
-    chans.map(c => `<button class="chip ${prefs.filter === c.name ? 'on' : ''}" data-f="${attr(c.name)}">${esc(c.name)}<small>${left(c)}</small></button>`).join('');
+  // channel chips: newest uploads first
+  const order = [...chans].sort((a, b) => (left(b)[0] ? new Date(left(b)[0].published) : 0) - (left(a)[0] ? new Date(left(a)[0].published) : 0));
+  $('chips').innerHTML = `<button class="chip all ${prefs.filter === 'all' ? 'on' : ''}" data-f="all">All <span class="n">${unwatched.length}</span></button>`
+    + order.map(c => `<button class="chip ${prefs.filter === c.name ? 'on' : ''}" data-f="${attr(c.name)}">${avatar(c.name)}${esc(c.name)} <span class="n">${left(c).length}</span></button>`).join('');
 
-  const shown = c => c.videos.filter(v => (showAll || !isWatched(v)) && lengthOk(v) && searchOk(v, c.name)).sort(byNewest);
+  // hero: the newest thing you haven't watched
+  const searching = $('search').value.trim();
+  const pool = unwatched.filter(v => (prefs.filter === 'all' || v.channel === prefs.filter) && lengthOk(v));
+  const top = !searching && prefs.view === 'new' ? pool[0] : null;
+  $('hero').innerHTML = top ? `<section class="hero" data-card="${attr(top.id)}">${thumb(top)}<div class="info">
+      <span class="eyebrow">Latest · ${ago(top.published)}</span>
+      <div class="who">${avatar(top.channel, 'lg')}<b>${esc(top.channel)}</b></div>
+      <a class="title" href="${attr(top.url)}" target="_blank" rel="noopener noreferrer">${esc(top.title)}</a>
+      <div class="actions"><a class="btn primary" href="${attr(top.url)}" target="_blank" rel="noopener noreferrer">▶ Watch</a>${tickBtn(top)}</div>
+    </div></section>` : '';
+
+  const shown = c => c.videos.filter(v => !isWatched(v) && lengthOk(v) && searchOk(v, c.name) && (!top || v.id !== top.id)).sort(byNewest);
   const visible = chans.filter(c => prefs.filter === 'all' || c.name === prefs.filter);
   let html = '';
   if (prefs.view === 'new') {
-    const all = visible.flatMap(c => shown(c).map(v => ({ ...v, channel: c.name }))).sort(byNewest);
     const groups = new Map();
-    for (const v of all) { const g = dayGroup(v.published); (groups.get(g) || groups.set(g, []).get(g)).push(v); }
+    for (const v of visible.flatMap(c => shown(c).map(v => ({ ...v, channel: c.name }))).sort(byNewest)) {
+      const g = dayGroup(v.published); (groups.get(g) || groups.set(g, []).get(g)).push(v);
+    }
     for (const [g, vids] of groups)
-      html += `<section class="group"><h2>${g}<span class="sub">${vids.length} video${vids.length > 1 ? 's' : ''}</span></h2><div class="grid">${vids.map(v => card(v, true)).join('')}</div></section>`;
-    if (!html) html = nothing();
+      html += `<section class="group"><h2>${g}<span class="sub">${vids.length}</span></h2><div class="grid">${vids.map(v => card(v, true)).join('')}</div></section>`;
   } else {
-    const rows = visible.map(c => ({ c, vids: shown(c) })).filter(r => r.vids.length || r.c.error && prefs.filter !== 'all');
+    const rows = visible.map(c => ({ c, vids: shown(c) })).filter(r => r.vids.length || (r.c.error && prefs.filter !== 'all'));
     rows.sort((a, b) => (b.vids[0] ? new Date(b.vids[0].published) : 0) - (a.vids[0] ? new Date(a.vids[0].published) : 0));
     for (const { c, vids } of rows)
-      html += `<section class="group"><h2>${esc(c.name)}<span class="sub">${left(c)} to watch</span>
-        ${left(c) > 1 ? `<button class="link" data-all="${attr(c.name)}">Mark all watched</button>` : ''}</h2>` +
-        (vids.length ? `<div class="grid">${vids.map(v => card(v, false)).join('')}</div>`
-          : `<div class="empty err">Couldn’t load this channel: ${esc(c.error)}</div>`) + '</section>';
-    if (!html) html = nothing();
+      html += `<section class="group"><h2>${avatar(c.name)}${esc(c.name)}<span class="sub">${left(c).length} to watch</span>`
+        + (left(c).length > 1 ? `<button class="link" data-all="${attr(c.name)}">Mark all watched</button>` : '') + '</h2>'
+        + (vids.length ? `<div class="grid">${vids.map(v => card({ ...v, channel: c.name }, false)).join('')}</div>`
+          : `<div class="empty err">Couldn't load this channel right now.</div>`) + '</section>';
   }
+  if (!html && !top) html = searching || prefs.length !== 'any'
+    ? `<div class="empty"><b>No matching videos</b>Try a different search or length.</div>`
+    : `<div class="empty"><b>🎉 You're all caught up</b>New videos will appear here automatically.</div>`;
   $('list').innerHTML = html;
-  lastTotal = total; updateStatus();
+  renderWatched(); renderNotes(); updateStatus(unwatched);
 }
-let lastTotal = 0;
-function updateStatus() {
-  // Updates only run 8am-10pm, so old data overnight / before the first morning run is expected.
-  const now = new Date(), hour = now.getHours() + now.getMinutes() / 60, activeHours = hour >= 8.75 && hour < 22.5;
-  const el = $('status'), stale = activeHours && data.updated && Date.now() - new Date(data.updated) > 45 * 60000;
-  el.textContent = `${lastTotal} to watch` + (data.updated ? ` · checked ${ago(data.updated)}` : '') + (stale ? ' ⚠️ updates look delayed' : '');
-  el.style.color = stale ? 'var(--accent)' : '';
-}
-function nothing() {
-  const filtering = $('search').value.trim() || prefs.length !== 'any';
-  return filtering
-    ? `<div class="empty big"><b>No matching videos</b>Try a different search or length.<br><button onclick="clearFilters()">Clear filters</button></div>`
-    : `<div class="empty big"><b>🎉 All caught up!</b>Nothing left to watch. New videos appear here automatically.</div>`;
-}
-function clearFilters() { $('search').value = ''; prefs.length = 'any'; savePrefs(); render(); }
 
+function renderWatched() {
+  const byId = new Map(allVideos().map(v => [v.id, v]));
+  const recent = [...marks].filter(([id, m]) => m[0] && byId.has(id)).sort((a, b) => b[1][1] - a[1][1]).slice(0, 10);
+  $('watchedBox').hidden = !recent.length;
+  $('watchedList').innerHTML = recent.map(([id]) => { const v = byId.get(id); return `<li><img loading="lazy" alt="" src="https://i.ytimg.com/vi/${attr(id)}/mqdefault.jpg"><span class="t"><b>${esc(v.channel)}</b> · ${esc(v.title)}</span><button class="btn" data-unwatch="${attr(id)}">Undo</button></li>`; }).join('');
+}
+
+function renderNotes() {
+  const seen = store.get('yt-notes-seen') || '';
+  const fresh = (data.notes || []).filter(n => n.at > seen);
+  $('notes').innerHTML = fresh.length ? `<div class="banner"><div class="grow">${fresh.map(n => `<p>${esc(n.text)}</p>`).join('')}</div><button id="dismissNotes" aria-label="Dismiss">×</button></div>` : '';
+  if (fresh.length) $('dismissNotes').onclick = () => { store.set('yt-notes-seen', fresh.map(n => n.at).sort().pop()); renderNotes(); };
+}
+
+let lastUnwatched = [];
+function updateStatus(unwatched = lastUnwatched) {
+  lastUnwatched = unwatched;
+  const secs = unwatched.reduce((n, v) => n + (v.seconds || 0), 0);
+  const now = new Date(), hour = now.getHours() + now.getMinutes() / 60;
+  const stale = hour >= 8.75 && hour < 22.5 && data.updated && Date.now() - new Date(data.updated) > 45 * 60000;
+  const el = $('status');
+  el.textContent = (unwatched.length ? `${unwatched.length} to watch · ${total(secs)}` : 'All caught up')
+    + (data.updated ? ` · ${shortAgo(data.updated)}` : '') + (stale ? ' ⚠️ updates look delayed' : '');
+  el.classList.toggle('stale', !!stale);
+}
+
+/* ================= actions ================= */
 function toast(msg, undo) {
   $('toastMsg').textContent = msg; lastAction = undo; $('toast').classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('show'), 6000);
 }
 $('undo').onclick = () => { if (lastAction) lastAction(); $('toast').classList.remove('show'); saveWatched(); render(); };
-
-$('list').addEventListener('change', e => {
-  const id = e.target.dataset.id; if (!id) return;
-  if (e.target.checked) { mark(id, true); toast('Marked as watched', () => mark(id, false)); }
-  else mark(id, false);
-  saveWatched(); render();
+document.addEventListener('click', e => {
+  const t = e.target.closest('.tick');
+  if (t) {
+    const id = t.dataset.id, el = document.querySelector(`[data-card="${CSS.escape(id)}"]`);
+    mark(id, true); saveWatched(); t.classList.add('done');
+    toast('Marked as watched', () => mark(id, false));
+    if (el) { el.classList.add('leaving'); setTimeout(render, 220); } else render();
+    return;
+  }
+  const u = e.target.closest('[data-unwatch]');
+  if (u) { mark(u.dataset.unwatch, false); saveWatched(); render(); return; }
+  const all = e.target.closest('[data-all]');
+  if (all) {
+    const ids = data.channels.find(c => c.name === all.dataset.all).videos.filter(v => !isWatched(v)).map(v => v.id);
+    ids.forEach(i => mark(i, true)); saveWatched(); render();
+    toast(`Marked ${ids.length} videos as watched`, () => ids.forEach(i => mark(i, false)));
+    return;
+  }
+  const chip = e.target.closest('[data-f]');
+  if (chip) { prefs.filter = chip.dataset.f; savePrefs(); render(); return; }
+  const seg = e.target.closest('.seg button');
+  if (seg) { prefs.view = seg.dataset.view; savePrefs(); render(); }
 });
-$('list').addEventListener('click', e => {
-  const name = e.target.dataset.all; if (!name) return;
-  const ids = data.channels.find(c => c.name === name).videos.filter(v => !isWatched(v)).map(v => v.id);
-  ids.forEach(i => mark(i, true)); saveWatched(); render();
-  toast(`Marked ${ids.length} videos as watched`, () => ids.forEach(i => mark(i, false)));
-});
-$('chips').addEventListener('click', e => {
-  const b = e.target.closest('[data-f]'); if (!b) return;
-  prefs.filter = b.dataset.f; savePrefs(); render();
-});
-document.querySelectorAll('input[name=view]').forEach(r => r.addEventListener('change', () => { prefs.view = r.value; savePrefs(); render(); }));
 $('length').addEventListener('change', e => { prefs.length = e.target.value; savePrefs(); render(); });
 $('search').addEventListener('input', render);
-$('showWatched').addEventListener('change', render);
-
+$('refresh').addEventListener('click', async () => {
+  const b = $('refresh'); b.classList.add('spin');
+  try { await fetch('refresh', { method: 'POST' }); } catch (e) {}   // only does something with serve.py
+  await reload(); await syncNow(); b.classList.remove('spin');
+});
+$('menuBtn').onclick = () => { $('syncLink').value = location.href; $('code').value = makeCode(); for (const id of ['linkCopied', 'codeCopied', 'restored']) $(id).textContent = ''; $('menu').showModal(); };
+$('closeMenu').onclick = () => $('menu').close();
+async function copy(field, out) { $(field).select(); try { await navigator.clipboard.writeText($(field).value); } catch (e) { document.execCommand('copy'); } $(out).textContent = 'Copied ✓'; }
+$('copyLink').onclick = () => copy('syncLink', 'linkCopied');
+$('copyCode').onclick = () => copy('code', 'codeCopied');
 const makeCode = () => 'yt1:' + btoa([...watched].join(','));
-$('backupBtn').onclick = () => { $('syncLink').value = location.href; $('linkCopied').textContent = ''; $('code').value = makeCode(); $('copied').textContent = ''; $('restored').textContent = ''; $('backup').showModal(); };
-$('closeBackup').onclick = () => $('backup').close();
-$('copyLink').onclick = async () => {
-  $('syncLink').select();
-  try { await navigator.clipboard.writeText(location.href); } catch (e) { document.execCommand('copy'); }
-  $('linkCopied').textContent = 'Copied ✓';
-};
-$('copy').onclick = async () => {
-  $('code').select();
-  try { await navigator.clipboard.writeText($('code').value); $('copied').textContent = 'Copied ✓'; }
-  catch (e) { document.execCommand('copy'); $('copied').textContent = 'Copied ✓'; }
-};
 $('restore').onclick = () => {
   const t = $('restoreCode').value.trim();
   try {
@@ -353,31 +518,81 @@ $('restore').onclick = () => {
     $('restored').textContent = `Restored ✓ (${watched.size - before} added)`; $('restoreCode').value = '';
   } catch (e) { $('restored').textContent = "That code didn't look right."; }
 };
-saveLocal();                       // runs the storage check up front
-initSyncKey(); syncNow();          // pull ticks made on other devices, push ours
-setInterval(syncNow, 5 * 60 * 1000);
 
-async function load() {
-  try {
-    data = await (await fetch('videos.json', { cache: 'no-store' })).json();
-    // Nothing older than a month is shown (the fetcher also drops them; this covers stale data).
-    const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - 1);
-    data.channels.forEach(c => { c.videos = c.videos.filter(v => new Date(v.published) >= cutoff); });
-    render();
-  }
-  catch (e) { $('status').textContent = 'Could not load video data'; }
+/* ================= watched ticks: device storage + encrypted sync ================= */
+const WKEY = 'yt-watched', MKEY = 'yt-marks', SKEY = 'yt-sync-key', KEEP_MS = 90 * 864e5;
+const marks = new Map();   // id -> [1 watched / 0 not, time ms]; the latest change wins on every device
+function loadMarks() {
+  marks.clear();
+  try { for (const [id, w, t] of JSON.parse(store.get(MKEY) || '[]')) marks.set(id, [w, t]); } catch (e) {}
+  try { for (const id of JSON.parse(store.get(WKEY) || '[]')) if (!marks.has(id)) marks.set(id, [1, 1]); } catch (e) {}
+  rebuildWatched();
 }
-$('refresh').addEventListener('click', async () => {
-  const b = $('refresh'); b.disabled = true; b.textContent = 'Checking…';
-  try { await fetch('refresh', { method: 'POST' }); } catch (e) {}   // only does something when run via serve.py
-  await load(); b.disabled = false; b.textContent = '↻ Refresh';
-});
-load();
-setInterval(load, 5 * 60 * 1000);        // pick up each new 10-minute check promptly
-setInterval(updateStatus, 60 * 1000);    // keep "checked 3 minutes ago" honest
-// Phones/tablets freeze timers in background tabs: reload data the moment the page is seen again.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { load(); syncNow(); } });
-window.addEventListener('pageshow', e => { if (e.persisted) load(); });
+function rebuildWatched() { watched = new Set([...marks].filter(([, m]) => m[0]).map(([id]) => id)); }
+function mark(id, on) { marks.set(id, [on ? 1 : 0, Date.now()]); on ? watched.add(id) : watched.delete(id); }
+function mergeMarks(list) {
+  let changed = false;
+  for (const [id, w, t] of list) { const cur = marks.get(id); if (!cur || t > cur[1]) { marks.set(id, [w, t]); changed = true; } }
+  if (changed) rebuildWatched();
+  return changed;
+}
+function saveLocal() {
+  const cutoff = Date.now() - KEEP_MS;
+  for (const [id, m] of marks) if (m[1] > 1 && m[1] < cutoff) marks.delete(id);
+  store.set(MKEY, JSON.stringify([...marks].map(([id, m]) => [id, m[0], m[1]])));
+  store.set(WKEY, JSON.stringify([...watched]));
+  try { navigator.storage && navigator.storage.persist && navigator.storage.persist(); } catch (e) {}
+}
+function saveWatched() { saveLocal(); syncSoon(); }
+window.addEventListener('storage', e => { if (e.key === MKEY && key) { try { if (mergeMarks(JSON.parse(e.newValue || '[]'))) render(); } catch (x) {} } });
+
+// Ticks are kept in a free anonymous text store under a long random key in the page address (#k=...).
+// They are encrypted with your password before they leave this device.
+const SYNC_URL = 'https://textdb.dev/api/data/';
+let syncKey = null, syncing = false, syncAgain = false, syncTimer;
+function initSyncKey() {
+  const m = location.hash.match(/[#&]k=([\w-]{16,64})/);
+  let k = (m && m[1]) || store.get(SKEY);
+  if (!k || !/^[\w-]{16,64}$/.test(k)) { const a = crypto.getRandomValues(new Uint8Array(18)); k = 'yt' + b64(a).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''); }
+  store.set(SKEY, k);
+  try { history.replaceState(null, '', location.pathname + location.search + '#k=' + k); } catch (e) {}
+  syncKey = k;
+}
+const serializeMarks = () => [...marks].map(([id, m]) => `${id},${m[0]},${m[1]}`).join('\n');
+const parseMarks = text => text.split('\n').map(l => l.trim().split(',')).filter(p => /^[\w-]{11}$/.test(p[0]) && /^[01]$/.test(p[1]) && /^\d+$/.test(p[2])).map(p => [p[0], +p[1], +p[2]]);
+function setSync(state) { $('syncStatus').textContent = state === 'ok' ? '☁ Ticks synced (encrypted)' : state === 'error' ? "☁ Couldn't reach the sync service; ticks are saved on this device" : ''; }
+async function syncNow() {
+  if (!syncKey || !key || location.protocol === 'file:') return;
+  if (syncing) { syncAgain = true; return; }
+  syncing = true;
+  try {
+    const r = await fetch(SYNC_URL + syncKey, { cache: 'no-store', referrerPolicy: 'no-referrer' });
+    if (!r.ok) throw new Error('get ' + r.status);
+    const raw = (await r.text()).trim();
+    let remote = [], plain = false;
+    if (raw.startsWith('enc1:')) remote = parseMarks(await decryptText(key, raw));
+    else if (raw) { remote = parseMarks(raw); plain = true; }   // saved by the older, unencrypted page
+    if (mergeMarks(remote)) { saveLocal(); render(); }
+    const theirs = new Map(remote.map(([id, , t]) => [id, t]));
+    const dirty = plain || [...marks].some(([id, m]) => !theirs.has(id) || theirs.get(id) < m[1]);
+    if (dirty) {
+      const p = await fetch(SYNC_URL + syncKey, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: await encryptText(key, serializeMarks()), referrerPolicy: 'no-referrer' });
+      if (!p.ok) throw new Error('post ' + p.status);
+    }
+    setSync('ok');
+  } catch (e) { setSync('error'); }
+  syncing = false;
+  if (syncAgain) { syncAgain = false; syncSoon(); }
+}
+function syncSoon() { clearTimeout(syncTimer); syncTimer = setTimeout(syncNow, 1200); }
+
+/* ================= keep fresh ================= */
+setInterval(reload, 5 * 60 * 1000);
+setInterval(() => updateStatus(), 60 * 1000);
+setInterval(syncNow, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && key) { reload(); syncNow(); } });
+window.addEventListener('pageshow', e => { if (e.persisted && key) reload(); });
+boot();
 </script>
 </body>
 </html>
