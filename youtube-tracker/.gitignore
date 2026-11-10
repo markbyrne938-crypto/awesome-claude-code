@@ -1,1 +1,5 @@
 __pycache__/
+# generated on each run; only ever published encrypted, never committed
+data.json
+previous.json
+videos.json

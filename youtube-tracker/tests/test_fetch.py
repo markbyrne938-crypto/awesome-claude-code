@@ -101,3 +101,32 @@ def test_playlist_items_and_feed_fallback():
     assert feed_from_playlist(items, previous, now) == [
         {"id": "newnewnew01", "title": "Brand new video", "published": "2026-11-07T17:00:00+00:00"},
         {"id": "oldoldold01", "title": "Older video", "published": "2026-11-04T18:00:05+00:00"}]
+
+
+def test_encryption_round_trip_and_requests():
+    from tracker_crypto import (data_key, decrypt_json, encrypt_json, open_request, request_public_key,
+                                seal_request)
+    key = data_key("correct horse battery")
+    env = encrypt_json(key, {"channels": ["Ryan Trahan"]})
+    assert "Ryan" not in str(env)
+    assert decrypt_json(key, env) == {"channels": ["Ryan Trahan"]}
+    try:
+        decrypt_json(data_key("wrong"), env)
+        assert False, "wrong password must not decrypt"
+    except Exception as exc:
+        assert type(exc).__name__ == "InvalidTag"
+    sealed = seal_request(request_public_key(key), {"add": "Ben Morris"})
+    assert "Ben" not in str(sealed)
+    assert open_request(key, sealed) == {"add": "Ben Morris"}
+
+
+def test_short_error_hides_urls():
+    import requests
+    from fetch_videos import short_error
+
+    class Resp:
+        status_code = 404
+    exc = requests.HTTPError("404 for url: https://www.youtube.com/feeds/videos.xml?channel_id=UCsecret")
+    exc.response = Resp()
+    assert short_error(exc) == "HTTP 404"
+    assert short_error(ValueError("UCsecret")) == "ValueError"

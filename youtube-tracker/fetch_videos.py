@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Fetch the newest videos for each channel in channels.json -> videos.json.
 
+Everything written to the repo or the site is encrypted with TRACKER_PASSWORD (see
+tracker_crypto.py), and the log never names channels or videos: public repos have public logs.
+
 Uses only YouTube's public RSS feeds and playlist pages (no API key); if a channel's feed
 fails, its uploads playlist is used instead. Channel IDs are
 looked up once by name and cached back into channels.json as "id"; to fix a
 wrong match, put the right "id" (UC...) in channels.json yourself.
 """
 import json
+import os
 import re
 import sys
 import time
@@ -16,9 +20,17 @@ from pathlib import Path
 
 import requests
 
+from tracker_crypto import (data_key, decrypt_json, encrypt_json, is_envelope, open_request,
+                            request_public_key)
+
 HERE = Path(__file__).parent
-CONFIG = HERE / "channels.json"
-OUTPUT = HERE / "videos.json"
+CONFIG = HERE / "channels.json"            # old plaintext list; migrated to CONFIG_ENC and deleted
+CONFIG_ENC = HERE / "channels.enc.json"    # the channel list, encrypted with the password
+PUBKEY = HERE / "channels.pub"             # lets add_channel.py seal changes for the workflow
+REQUESTS = HERE / "channel-requests"       # sealed add/remove requests waiting to be applied
+PREVIOUS = HERE / "previous.json"          # the site's current data.json, fetched by the workflow
+OUTPUT = HERE / "data.json"                # what the site serves: always encrypted
+NOTE_DAYS = 14                             # how long "channel added" notes stay on the page
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124 Safari/537.36",
       "Accept-Language": "en-GB,en;q=0.9"}
 COOKIES = {"CONSENT": "YES+1", "SOCS": "CAI"}
@@ -262,50 +274,125 @@ def keep_video(video_id, lengths, shorts, lives):
     return not lengths or video_id in lengths
 
 
+def short_error(exc):
+    """Error text for the public log: never the URL, which contains the channel ID."""
+    resp = getattr(exc, "response", None)
+    if resp is not None and getattr(resp, "status_code", None):
+        return f"HTTP {resp.status_code}"
+    return type(exc).__name__
+
+
+def load_config(key):
+    """(config, migrating): the encrypted list, or the old plaintext one on the first run."""
+    if CONFIG_ENC.exists():
+        try:
+            return decrypt_json(key, json.loads(CONFIG_ENC.read_text())), False
+        except Exception:
+            sys.exit("Can't decrypt channels.enc.json: TRACKER_PASSWORD isn't the password it was "
+                     "encrypted with. Put the old password back (nothing is published until then).")
+    return json.loads(CONFIG.read_text()), True
+
+
+def load_previous(key):
+    """The data currently on the site, so known videos keep exact dates and a failing channel
+    can show its last good list."""
+    if not PREVIOUS.exists():
+        return {}
+    try:
+        obj = json.loads(PREVIOUS.read_text())
+        if is_envelope(obj):
+            obj = decrypt_json(key, obj)
+        return obj if isinstance(obj, dict) and "channels" in obj else {}
+    except Exception as exc:
+        print(f"previous data not usable ({short_error(exc)}); starting fresh")
+        return {}
+
+
+def apply_requests(key, config, notes, stamp):
+    """Apply sealed add/remove requests (from add_channel.py), deleting each one."""
+    changed = False
+    for f in sorted(REQUESTS.glob("*.json")) if REQUESTS.exists() else []:
+        changed = True
+        try:
+            req = open_request(key, json.loads(f.read_text()))
+        except Exception as exc:
+            print(f"channel request {f.name}: unreadable ({short_error(exc)}); removed")
+            f.unlink()
+            continue
+        if req.get("remove"):
+            before = len(config["channels"])
+            config["channels"] = [c for c in config["channels"] if _norm(c["name"]) != _norm(req["remove"])]
+            gone = len(config["channels"]) < before
+            notes.append({"at": stamp, "text": f"Stopped tracking {req['remove']}." if gone
+                          else f"Couldn't find {req['remove']} to remove."})
+        elif req.get("add"):
+            if any(_norm(c["name"]) == _norm(req["add"]) for c in config["channels"]):
+                notes.append({"at": stamp, "text": f"{req['add']} is already on your list."})
+            else:
+                entry = {"name": req["add"]}
+                if req.get("id"):
+                    entry["id"] = req["id"]
+                config["channels"].append(entry)
+        print(f"channel request {f.name}: applied")
+        f.unlink()
+    return changed
+
+
 def main():
-    config = json.loads(CONFIG.read_text())
+    password = os.environ.get("TRACKER_PASSWORD", "")
+    now = datetime.now(timezone.utc)
+    stamp = now.isoformat(timespec="seconds")
+    if not password:
+        # Fail closed: without a password nothing about the channels or videos is published.
+        OUTPUT.write_text(json.dumps({"v": 1, "setup_required": True}) + "\n")
+        print("TRACKER_PASSWORD is not set: published the setup screen only, with no data.")
+        return
+
+    key = data_key(password)
+    config, changed = load_config(key)
     limit = config.get("videos_per_channel", 5)
     max_age = config.get("max_age_days", 31)   # ~1 month: older videos are not shown
-    previous = {}
-    if OUTPUT.exists():
-        for ch in json.loads(OUTPUT.read_text()).get("channels", []):
-            for v in ch["videos"]:
-                previous[v["id"]] = v
+    prev = load_previous(key)
+    previous = {v["id"]: v for c in prev.get("channels", []) for v in c.get("videos", [])}
+    old_channels = {c["name"]: c for c in prev.get("channels", [])}
+    cutoff = now - timedelta(days=NOTE_DAYS)
+    notes = [n for n in prev.get("notes", []) if datetime.fromisoformat(n["at"]) >= cutoff]
+    changed = apply_requests(key, config, notes, stamp) or changed
 
-    out, changed = [], False
-    for ch in config["channels"]:
-        name = ch["name"]
+    out, total = [], len(config["channels"])
+    for i, ch in enumerate(config["channels"], 1):
+        name, label = ch["name"], f"channel {i}/{total}"
         try:
             new_match = not ch.get("id")
             if new_match:
                 (ch["id"], found_title, info), candidates = find_channel_id(ch.get("search", name))
                 changed = True
-                print(f"{name}: matched channel '{found_title}' ({ch['id']}) {info}")
-                others = [f"'{t}' ({i})" for cid, t, i in candidates[:5] if cid != ch["id"]]
-                if others:
-                    print(f"{name}:   other search results: " + "; ".join(others))
+                print(f"{label}: new channel looked up")
             try:
                 feed, feed_error = get_feed(ch["id"]), None
             except Exception as exc:
                 feed, feed_error = None, exc
             lengths, shorts, lives, uploads = {}, set(), set(), []
-            for label, load in (
-                ("lengths", lambda: uploads.extend(parse_playlist_items(_playlist_html(ch["id"], "UULF")))),
+            for what, load in (
+                ("uploads", lambda: uploads.extend(parse_playlist_items(_playlist_html(ch["id"], "UULF")))),
                 ("Shorts", lambda: shorts.update(parse_shorts(_playlist_html(ch["id"], "UUSH")))),
                 ("live streams", lambda: lives.update(channel_playlist(ch["id"], "UULV"))),
             ):
                 try:
                     load()
                 except Exception as exc:  # no info for this list; still show the videos
-                    print(f"{name}: could not read {label} list ({exc})", file=sys.stderr)
+                    print(f"{label}: could not read the {what} list ({short_error(exc)})")
             lengths.update({it["id"]: it["seconds"] for it in uploads})
             if feed is None:
                 if not uploads:
                     raise feed_error
-                feed = feed_from_playlist(uploads, previous, datetime.now(timezone.utc))
-                print(f"{name}: feed unavailable ({feed_error}); used the uploads list instead")
-            if new_match and feed:
-                print(f"{name}:   newest upload: '{feed[0]['title']}' ({feed[0]['published'][:10]})")
+                feed = feed_from_playlist(uploads, previous, now)
+                print(f"{label}: feed unavailable ({short_error(feed_error)}); used the uploads list instead")
+            if new_match:
+                others = [f"{t} ({i2})" for cid, t, i2 in candidates[:4] if cid != ch["id"]]
+                newest = f" Newest upload: “{feed[0]['title']}”." if feed else ""
+                notes.append({"at": stamp, "text": f"Added {name}: matched “{found_title}” ({info}).{newest}"
+                              + (f" Other channels with that name: {'; '.join(others)}." if others else "")})
             videos = []
             for v in feed:
                 if not keep_video(v["id"], lengths, shorts, lives) or not is_recent(v["published"], max_age):
@@ -316,24 +403,21 @@ def main():
                 if len(videos) >= limit:
                     break
             out.append({"name": name, "id": ch["id"], "videos": videos})
-            print(f"{name}: {len(videos)} videos")
-        except Exception as exc:  # keep going; show last known data for this channel
-            print(f"{name}: FAILED ({exc})", file=sys.stderr)
-            old = next((c for c in _old_channels() if c["name"] == name), None)
+            print(f"{label}: {len(videos)} videos")
+        except Exception as exc:  # keep going; show the last good list for this channel
+            print(f"{label}: FAILED ({short_error(exc)})")
+            old = old_channels.get(name)
             out.append(old or {"name": name, "id": ch.get("id"), "videos": [], "error": str(exc)})
 
     if changed:
-        CONFIG.write_text(json.dumps(config, indent=2) + "\n")
-    OUTPUT.write_text(json.dumps(
-        {"updated": datetime.now(timezone.utc).isoformat(timespec="seconds"), "channels": out},
-        indent=1) + "\n")
-
-
-def _old_channels():
-    try:
-        return json.loads(OUTPUT.read_text()).get("channels", [])
-    except Exception:
-        return []
+        CONFIG_ENC.write_text(json.dumps(encrypt_json(key, config)) + "\n")
+        if CONFIG.exists():
+            CONFIG.unlink()
+            print("moved the channel list into channels.enc.json")
+    pub = request_public_key(key)
+    if not PUBKEY.exists() or PUBKEY.read_text().strip() != pub:
+        PUBKEY.write_text(pub + "\n")
+    OUTPUT.write_text(json.dumps(encrypt_json(key, {"updated": stamp, "channels": out, "notes": notes})) + "\n")
 
 
 if __name__ == "__main__":
