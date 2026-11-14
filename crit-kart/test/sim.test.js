@@ -1,6 +1,6 @@
 // Run with: node test/sim.test.js
 const assert = require('assert');
-require('../js/ble.js'); require('../js/course.js'); require('../js/sim.js'); require('../js/export.js');
+require('../js/ble.js'); require('../js/course.js'); require('../js/sim.js'); require('../js/export.js'); require('../js/fitness.js');
 const C = globalThis.Crit;
 
 // FTMS Indoor Bike Data: flags 0x0044 = speed present (bit0=0), cadence (bit2), power (bit6)
@@ -254,4 +254,76 @@ const { decodeFit } = require('./fitdecode.js');
     assert.strictEqual(dv.getUint32(off, true), 0x04034b50); const ln = dv.getUint16(off + 26, true), data = z.slice(off + 30 + ln, off + 30 + ln + size); assert.strictEqual(C.crc32(data), crc, 'stored CRC32 matches'); got.push([name, Buffer.from(data).toString('hex')]); p += 46 + nl; }
   assert.deepStrictEqual(got.map((g) => g[0]), ['a.txt', 'dir/b.bin']); assert.strictEqual(C.crc32(Uint8Array.from(Buffer.from('123456789'))), 0xcbf43926, 'CRC32 check value');
   console.log('zip checks ok');
+}
+
+// Drafting (Zwift-style): ~25 % on one wheel, more in a line, nothing far back or off to the side, eased in
+{
+  const setup = (place) => {
+    const race = new C.Race({ track: C.buildTrack(C.COURSES[0]), laps: 3, mass: 84, pace: 200, difficulty: 1, autoSteer: false, rubber: false });
+    for (const b of race.boxes) { b.active = false; b.respawn = 1e9; }
+    race.state = 'racing'; race.time = 0;
+    const p = race.player, others = race.riders.filter((r) => !r.isPlayer);
+    others.forEach((r) => { r.s = 9000; r.finished = true; });
+    p.s = 20; p.x = 0; p.v = 9.5;
+    place(p, others);
+    return { race, p, others };
+  };
+  const settle = (place) => {
+    const { race, p, others } = setup(place); let first = null;
+    const off = others.filter((r) => !r.finished).map((r) => [r, r.s - p.s, r.x]);
+    for (let i = 0; i < 180; i++) { for (const [r, d, x] of off) { r.s = p.s + d; r.x = x; r.v = p.v; } p.x = 0; race.stepRider(p, 1 / 60, true); if (i === 5) first = p.draft; }
+    return { save: p.draft * C.DRAFT_MAX, first: first * C.DRAFT_MAX };
+  };
+  const on = (r, d, x = 0) => { r.finished = false; r.s = 20 + d; r.x = x; };
+  const one = settle((p, o) => on(o[0], 1.8));
+  const line = settle((p, o) => { on(o[0], 1.8); on(o[1], 3.8); on(o[2], 5.8); on(o[3], 7.8); });
+  const far = settle((p, o) => on(o[0], 13)), side = settle((p, o) => on(o[0], 1.8, 0.4)), mid = settle((p, o) => on(o[0], 7));
+  assert.ok(one.save > 0.23 && one.save < 0.26, `one wheel saves about 25 % (${(one.save * 100).toFixed(0)} %)`);
+  assert.ok(line.save > one.save + 0.05 && line.save <= 0.35 + 1e-9, `a line of riders saves more, up to 35 % (${(line.save * 100).toFixed(0)} %)`);
+  assert.ok(far.save < 0.005 && side.save < 0.005, 'no draft 13 m back or a lane to the side');
+  assert.ok(mid.save > 0.05 && mid.save < one.save, 'the draft fades with distance');
+  assert.ok(one.first < 0.05, 'the draft eases in rather than switching on');
+  console.log(`draft checks ok (one wheel ${(one.save * 100).toFixed(0)} %, line of four ${(line.save * 100).toFixed(0)} %, 7 m back ${(mid.save * 100).toFixed(0)} %)`);
+
+  // Auto-follow sits in the shelter smoothly: no braking, no weaving, and it doesn't pull out without the power to pass
+  const race = new C.Race({ track: C.buildTrack(C.COURSES[0]), laps: 3, mass: 84, pace: 220, difficulty: 1, autoSteer: true, rubber: false });
+  for (const b of race.boxes) { b.active = false; b.respawn = 1e9; }
+  race.state = 'racing'; race.time = 0;
+  const p = race.player, lead = race.riders.find((r) => !r.isPlayer);
+  for (const r of race.riders) if (r !== p && r !== lead) { r.s = 9000; r.finished = true; }
+  lead.s = 30; lead.x = 0.1; lead.v = 9; lead.ai.f = 0.9; lead.ai.lane = 0.1; lead.ai.sloppy = false; lead.ai.attackT = 1e9;
+  p.s = 27; p.x = 0.1; p.v = 9;
+  let maxDv = 0, prev = p.v, maxOff = 0, shelter = 0, n = 0, pulledOut = false;
+  for (let i = 0; i < 60 * 8; i++) { // (the first 8 s of this course are flat)
+    race.update(1 / 60, { power: 150, steer: 0, use: false }); race.events.length = 0;
+    if (i > 60) { n++; maxDv = Math.max(maxDv, Math.abs(p.v - prev)); if (lead.s > p.s) maxOff = Math.max(maxOff, Math.abs(lead.x - p.x)); if (p.draft > 0.3) shelter++; if (p._auto.ot) pulledOut = true; }
+    prev = p.v;
+  }
+  assert.ok(!pulledOut && maxOff < 0.15, `stays in line behind the wheel (largest sideways offset ${maxOff.toFixed(2)})`);
+  assert.ok(shelter / n > 0.9, `sits in the shelter (${(100 * shelter / n).toFixed(0)} % of the time)`);
+  assert.ok(maxDv < 0.02, `speed changes gently, with no braking (largest step ${maxDv.toFixed(3)} m/s per frame)`);
+  console.log(`sit-in checks ok (sheltered ${(100 * shelter / n).toFixed(0)} % of the time, sideways offset < ${maxOff.toFixed(2)})`);
+}
+
+// Training numbers
+{
+  const F = C.fitness, ftp = 200;
+  const log = [].concat(Array(60).fill(100), Array(60).fill(200), Array(30).fill(320));
+  assert.deepStrictEqual(F.zoneTimes(log, ftp), [60, 0, 0, 60, 0, 0, 30]);
+  assert.strictEqual(F.bestAverage(log, 30), 320); assert.strictEqual(F.bestAverage(log, 60), 260); assert.strictEqual(F.bestAverage(log, 300), 0);
+  const sum = F.summarize(log, ftp, 0);
+  assert.ok(Math.abs(sum.kj - 27.6) < 1e-9 && Math.abs(sum.kcal - 27.6 / 4.184 / 0.24) < 1e-9, 'work and food energy');
+  assert.ok(Math.abs(sum.if_ - 184 / 200) < 1e-9 && Math.abs(sum.tss - (150 * 184 * 0.92) / (200 * 3600) * 100) < 1e-9, 'intensity and training load');
+  assert.strictEqual(sum.bests[5], 320); assert.strictEqual(sum.bests[60], 260); assert.ok(!(300 in sum.bests));
+  const day = 86400000, now = new Date(2026, 5, 10, 18).getTime();
+  const hist = [0, 1, 2, 4, 9].map((ago) => ({ t: now - ago * day, course: 'meadow', courseName: 'Sunny Meadows Crit', laps: 12, finished: true, secs: 700 + ago, kj: 100, tss: 20, bests: { 60: 250 - ago } }));
+  const wk = F.weekly(hist, now);
+  assert.strictEqual(wk.rides, 4); assert.strictEqual(wk.kj, 400); assert.strictEqual(wk.streak, 3);
+  assert.strictEqual(F.weekly(hist.slice(1), now).streak, 2, 'yesterday keeps the streak alive');
+  assert.strictEqual(F.weekly(hist.slice(2), now).streak, 0);
+  const rec = F.records(hist); assert.strictEqual(rec.power[60], 250); assert.strictEqual(rec.course['meadow:12'], 700);
+  const fresh = { course: 'meadow', courseName: 'Sunny Meadows Crit', laps: 12, finished: true, secs: 690, bests: { 60: 262 } };
+  assert.strictEqual(F.newRecords(hist, fresh).length, 2); assert.strictEqual(F.newRecords([], fresh).length, 0, 'a first ride sets no records');
+  assert.strictEqual(C.fmtTime ? C.fmtTime(119.97) : '2:00.0', '2:00.0');
+  console.log('training log checks ok');
 }

@@ -154,13 +154,10 @@
         const ch = await svc.getCharacteristic(UUID.CPS_MEASUREMENT);
         ch.addEventListener('characteristicvaluechanged', (ev) => {
           const d = parseCyclingPower(ev.target.value);
-          if (d.crankRevs != null) {
-            if (this.lastCrank) {
-              const dr = (d.crankRevs - this.lastCrank.r + 65536) % 65536;
-              const dt = ((d.crankTime - this.lastCrank.t + 65536) % 65536) / 1024;
-              if (dt > 0) d.cadence = (dr / dt) * 60;
-            }
-            this.lastCrank = { r: d.crankRevs, t: d.crankTime };
+          if (d.crankRevs != null) { // (shared calculator: also drops to 0 when the cranks stop, instead of holding the last figure)
+            if (!this.lastCrank) this.lastCrank = new CadenceCalc();
+            const rpm = this.lastCrank.update(d, performance.now());
+            if (rpm !== null) d.cadence = rpm;
           }
           this.cb.onData(d);
         });

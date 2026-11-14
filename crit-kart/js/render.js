@@ -12,10 +12,12 @@
   const lerp = (a, b, t) => a + (b - a) * t;
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const ZONES = [[0.55, '#9aa5b1'], [0.75, '#4dabf7'], [0.9, '#51cf66'], [1.05, '#ffd43b'], [1.2, '#ff922b'], [1.5, '#ff4d4d'], [99, '#b44dff']];
+  const ZONE_NAMES = ['RECOVERY', 'ENDURANCE', 'TEMPO', 'THRESHOLD', 'VO2 MAX', 'ANAEROBIC', 'SPRINT'];
+  const zoneOf = (ratio) => { for (let i = 0; i < ZONES.length; i++) if (ratio < ZONES[i][0]) return i; return ZONES.length - 1; };
   const zoneColor = (ratio) => { for (const [t, c] of ZONES) if (ratio < t) return c; return ZONES[ZONES.length - 1][1]; };
 
   function fmtTime(t) {
-    if (t < 0) t = 0;
+    t = Math.round(Math.max(0, t) * 10) / 10; // round first, so 119.97 s reads 2:00.0 and not 1:60.0
     const m = Math.floor(t / 60), s = t - m * 60;
     return `${m}:${s < 10 ? '0' : ''}${s.toFixed(1)}`;
   }
@@ -523,6 +525,7 @@
       this.stats = { riders: 0, sprites: {} };
       for (const r of race.riders) { if (O.mirror && r.isPlayer) continue; put(r.s, { kind: 'rider', off: r.x, r }); }
 
+      const tags = [];
       const tagged = new Set(race.riders.filter((o) => !o.isPlayer && o.s - p.s > 3 && o.s - p.s < 90).sort((a, b) => a.s - b.s).slice(0, 3));
       for (let n = DRAW - 1; n >= 1; n--) {
         const list = buckets[n];
@@ -557,8 +560,7 @@
               else {
                 const label = r.status ? `${r.name} · ${r.status}` : r.name, stCol = r.status === 'SPRINT' ? '#ff8787' : r.status === 'ATTACK' ? '#ffd43b' : r.status === 'TIRED' ? '#9bd0ff' : '#fff';
                 ctx.font = `700 ${sz}px ${FONT}`; const tw = ctx.measureText(label).width + sz * 0.9, ty = sy - pu * O.rw * 1.45;
-                rrect(ctx, sx - tw / 2, ty - sz * 0.75, tw, sz * 1.5, sz * 0.75); ctx.fillStyle = 'rgba(15,15,30,.6)'; ctx.fill();
-                ctx.fillStyle = stCol; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, sx, ty + 1);
+                tags.push({ label, stCol, sz, sx, ty, tw }); // drawn after the riders, nearest first, so bunched-up names stack instead of overlapping
               }
             }
           } else if (sp.kind === 'box') {
@@ -582,6 +584,12 @@
           }
         }
         ctx.restore();
+      }
+      for (let i = tags.length - 1; i >= 0; i--) {
+        const t = tags[i];
+        for (let k = 0; k < 4; k++) { let hit = false; for (let j = tags.length - 1; j > i; j--) { const o = tags[j]; if (Math.abs(o.sx - t.sx) < (o.tw + t.tw) / 2 + 4 && Math.abs(o.ty - t.ty) < (o.sz + t.sz) * 0.8) { hit = true; t.ty = o.ty - (o.sz + t.sz) * 0.85; } } if (!hit) break; }
+        ctx.font = `700 ${t.sz}px ${FONT}`; rrect(ctx, t.sx - t.tw / 2, t.ty - t.sz * 0.75, t.tw, t.sz * 1.5, t.sz * 0.75); ctx.fillStyle = 'rgba(15,15,30,.6)'; ctx.fill();
+        ctx.fillStyle = t.stCol; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t.label, t.sx, t.ty + 1);
       }
       if (!hud.menu) { if (this.q.fx) this.drawSpeedFx(p.v); this.drawHUD(race, hud); }
     }
@@ -627,6 +635,7 @@
       const ratio = hud.ftp ? hud.power / hud.ftp : 0, zc = zoneColor(ratio);
       text(ctx, String(Math.round(hud.power)), px + S(16), py + S(52), S(68), zc, 'left');
       text(ctx, 'WATTS', px + pw - S(16), py + S(30), S(20), '#fff', 'right');
+      if (hud.ftp) { const z = zoneOf(ratio); text(ctx, `Z${z + 1} ${ZONE_NAMES[z]}`, px + pw - S(16), py + S(60), S(15), zc, 'right'); }
       ctx.fillStyle = 'rgba(0,0,0,.18)'; rrect(ctx, px + S(16), py + S(92), pw - S(32), S(14), S(7)); ctx.fill();
       ctx.fillStyle = zc; rrect(ctx, px + S(16), py + S(92), Math.max(S(8), (pw - S(32)) * clamp(ratio / 1.6, 0, 1)), S(14), S(7)); ctx.fill();
       text(ctx, `${(hud.power / hud.weight).toFixed(1)} W/kg`, px + S(16), py + S(128), S(20), '#fff');
@@ -635,10 +644,16 @@
         const hx = px + S(206), hy = py + S(128);
         ctx.save(); ctx.translate(hx, hy); ctx.scale(S(1), S(1)); ctx.beginPath(); ctx.moveTo(0, 6); ctx.bezierCurveTo(-12, -2, -8, -12, 0, -6); ctx.bezierCurveTo(8, -12, 12, -2, 0, 6); ctx.fillStyle = hc; ctx.fill(); ctx.lineWidth = 2.5; ctx.strokeStyle = INK; ctx.stroke(); ctx.restore();
         text(ctx, hud.hr ? String(Math.round(hud.hr)) : '--', hx + S(18), hy, S(20), hud.hr ? '#fff' : '#d0d3dc'); }
-      text(ctx, `${(p.v * 3.6).toFixed(1)} km/h`, px + S(16), py + ph + S(22), S(22), '#fff');
+      text(ctx, `${(p.v * 3.6).toFixed(1)} km/h`, px + S(16), py + ph + S(22), S(20), '#fff');
       const gp = p.grade * 100, gcol = gp > 0.5 ? '#ff922b' : gp < -0.5 ? '#51cf66' : '#fff';
-      text(ctx, `${gp > 0.5 ? '▲' : gp < -0.5 ? '▼' : '►'} ${Math.abs(gp).toFixed(1)}%`, px + S(150), py + ph + S(22), S(22), gcol);
-      if (p.draft > 0.15) text(ctx, `DRAFTING -${Math.round(38 * p.draft)}% drag`, px + S(16), py + ph + S(50), S(16), '#8cffb0');
+      text(ctx, `${gp > 0.5 ? '▲' : gp < -0.5 ? '▼' : '►'} ${Math.abs(gp).toFixed(1)}%`, px + S(128), py + ph + S(22), S(20), gcol);
+      if (hud.kj != null) text(ctx, `${Math.round(hud.kj)} kJ`, px + pw + S(6), py + ph + S(22), S(16), '#ffe9a8', 'right');
+      // draft meter: how much of the wind the riders ahead are taking (fills as you tuck in)
+      { const dy = py + ph + S(42), dw = S(120), on = p.draft > 0.06;
+        ctx.globalAlpha = on ? 1 : 0.45; text(ctx, 'DRAFT', px + S(16), dy + S(7), S(14), on ? '#8cffb0' : '#fff');
+        ctx.fillStyle = 'rgba(0,0,0,.3)'; rrect(ctx, px + S(70), dy, dw, S(13), S(6.5)); ctx.fill();
+        if (on) { ctx.fillStyle = '#51e08a'; rrect(ctx, px + S(70), dy, Math.max(S(13), dw * clamp(p.draft, 0, 1)), S(13), S(6.5)); ctx.fill(); text(ctx, `-${Math.round(100 * C.DRAFT_MAX * p.draft)}% wind`, px + S(78) + dw, dy + S(7), S(14), '#8cffb0'); }
+        ctx.globalAlpha = 1; }
 
       // connection chips
       let cx = px;
@@ -654,7 +669,7 @@
       // race info (top right)
       const order = race.sorted(), place = order.indexOf(p) + 1;
       const rx = W - S(236), rw = S(220);
-      panel(ctx, rx, py, rw, S(110));
+      panel(ctx, rx, py, rw, S(126));
       text(ctx, `${place}`, rx + S(14), py + S(44), S(62), place === 1 ? '#ffd43b' : '#fff');
       text(ctx, `/ ${race.riders.length}`, rx + S(66), py + S(60), S(22), '#fff');
       text(ctx, `LAP ${p.lap}/${race.laps}`, rx + rw - S(14), py + S(30), S(24), '#fff', 'right');
@@ -662,7 +677,7 @@
       const ahead = order[place - 2], behind = order[place];
       const gap = (o) => Math.abs(o.s - p.s) / Math.max(4, p.v);
       if (ahead) text(ctx, `▲ ${ahead.name} +${gap(ahead).toFixed(1)}s`, rx + rw - S(10), py + S(90), S(15), '#ffd7e8', 'right');
-      if (behind) text(ctx, `▼ ${behind.name} -${gap(behind).toFixed(1)}s`, rx + rw - S(10), py + S(110) + S(4), S(15), '#d7f0ff', 'right');
+      if (behind) text(ctx, `▼ ${behind.name} -${gap(behind).toFixed(1)}s`, rx + rw - S(10), py + S(110), S(15), '#d7f0ff', 'right');
 
       // leaderboard (all riders, gap in seconds to you)
       { const rows = order.length, rh = S(21), lx = S(16), ly = py + ph + S(100), lw = S(210);
@@ -766,5 +781,5 @@
     }
   }
 
-  Object.assign(C, { Renderer, buildMirrorView, fmtTime, drawItemIcon, zoneColor });
+  Object.assign(C, { Renderer, buildMirrorView, fmtTime, drawItemIcon, zoneColor, zoneOf, ZONES, ZONE_NAMES });
 })();

@@ -86,7 +86,8 @@
   $('btnTrainer').addEventListener('click', async () => {
     if (!hasBle) return setStatus('trainerStatus', 'Web Bluetooth not available — use Chrome or Edge over https/localhost.', true);
     try {
-      if (trainer.link) trainer.link.disconnect();
+      if (trainer.link) { trainer.link.cb.onDisconnect = null; trainer.link.disconnect(); } // (a deliberate swap is not a dropout: no auto-reconnect)
+      trainer.connected = false;
       trainer.link = new C.TrainerLink(trainerCallbacks());
       setStatus('trainerStatus', 'Connecting…');
       await trainer.link.connect();
@@ -238,6 +239,7 @@
     if (e.code === 'KeyF') toggleFullscreen();
   });
   window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+  window.addEventListener('pagehide', () => logUnfinished()); // closing the tab mid-race still logs the ride
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && state.mode === 'race' && !state.resultsShown) pauseGame('Paused while the tab was hidden');
     else if (!document.hidden && state.mode === 'race') acquireWake();
@@ -289,14 +291,43 @@
   $('btnQuit').addEventListener('click', () => toMenu());
 
   // ---------- Menu wiring ----------
+  // little map of the circuit for the course cards
+  function drawCourseThumb(cv, track, theme) {
+    const ctx = cv.getContext('2d'), W = cv.width, H = cv.height, pts = track.map, pad = 12;
+    ctx.fillStyle = (theme && theme.grass && theme.grass[0]) || '#7bd66a'; ctx.fillRect(0, 0, W, H);
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9; for (const [x, y] of pts) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+    const sc = Math.min((W - 2 * pad) / (x1 - x0 || 1), (H - 2 * pad) / (y1 - y0 || 1)), ox = (W - (x1 - x0) * sc) / 2, oy = (H - (y1 - y0) * sc) / 2;
+    const path = () => { ctx.beginPath(); pts.forEach(([x, y], i) => { const X = ox + (x - x0) * sc, Y = oy + (y - y0) * sc; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.closePath(); };
+    ctx.lineJoin = 'round'; ctx.lineWidth = 11; ctx.strokeStyle = '#1b1b2f'; path(); ctx.stroke();
+    ctx.lineWidth = 6; ctx.strokeStyle = '#fff'; path(); ctx.stroke();
+    ctx.fillStyle = '#ff5fa2'; ctx.strokeStyle = '#1b1b2f'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(ox + (pts[0][0] - x0) * sc, oy + (pts[0][1] - y0) * sc, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  }
   const courseSel = $('course');
   C.COURSES.forEach((c) => { const o = document.createElement('option'); o.value = c.id; o.textContent = c.name; courseSel.appendChild(o); });
   const ftpValid = () => Number.isFinite(cfg.ftp) && cfg.ftp >= 60 && cfg.ftp <= 700;
   const weightValid = () => Number.isFinite(cfg.weight) && cfg.weight >= 35 && cfg.weight <= 200;
+  const menuTracks = {};
+  const menuTrack = (def) => menuTracks[def.id] || (menuTracks[def.id] = C.buildTrack(def)); // (read-only use: lengths, lap-time estimates, map outline)
+  const lapSecs = (def) => { const f = ftpValid() ? cfg.ftp : 200, wt = weightValid() ? cfg.weight : 75; return C.estimateLapTime(menuTrack(def), f, wt + 9); };
+  // laps slider value that makes the chosen course last about `min` minutes at your FTP
+  const lapsForMinutes = (def, min) => clamp(Math.round((min * 60) / lapSecs(def) / (def.lapScale || 1)), 2, 40);
   const bind = (id, key, num) => {
     const el = $(id); el.value = cfg[key];
     el.addEventListener('input', () => { cfg[key] = num ? Number(el.value) : el.value; store.set(key, cfg[key]); if (key === 'course') makeDemo(); refreshLabels(); });
   };
+  C.COURSES.forEach((c) => {
+    const t = menuTrack(c), b = document.createElement('button'); b.type = 'button'; b.className = 'ccard'; b.dataset.v = c.id;
+    let top = 0; for (let d = 0; d < t.length; d += 8) top = Math.max(top, t.gradeAt(d) * 100);
+    const cv = document.createElement('canvas'); cv.width = 132; cv.height = 92; drawCourseThumb(cv, t, C.THEMES[c.theme]);
+    const nm = document.createElement('b'); nm.textContent = c.name; const meta = document.createElement('span'); meta.textContent = `${Math.round(t.length)} m lap · climbs to ${Math.round(top)}%`;
+    b.append(cv, nm, meta);
+    b.addEventListener('click', () => { courseSel.value = c.id; courseSel.dispatchEvent(new Event('input')); });
+    $('courseCards').appendChild(b);
+  });
+  $('lenSeg').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => {
+    const def = C.COURSES.find((c) => c.id === cfg.course) || C.COURSES[0];
+    cfg.laps = lapsForMinutes(def, Number(b.dataset.min)); store.set('laps', cfg.laps); $('laps').value = cfg.laps; refreshLabels();
+  }));
   bind('course', 'course'); bind('laps', 'laps', true); bind('gradeFeel', 'gradeFeel', true); bind('sens', 'sens', true);
 
   // required numeric fields (empty = not set, never silently defaulted)
@@ -344,20 +375,22 @@
   function refreshLabels() {
     const def = C.COURSES.find((c) => c.id === cfg.course) || C.COURSES[0];
     const ok = ftpValid() && weightValid(), f = ftpValid() ? cfg.ftp : 200, wt = weightValid() ? cfg.weight : 75;
-    const est = (d) => C.estimateLapTime(C.buildTrack(d), f, wt + 9) * lapsFor(d) / 60;
+    const est = (d) => lapSecs(d) * lapsFor(d) / 60;
     const timeNote = ftpValid() ? ` — about ${est(def).toFixed(1)} min at ${cfg.ftp} W (less in the draft).` : '.';
     if (cfg.mode === 'champ') {
       $('courseBlurb').textContent = `Championship: ${C.COURSES.map((c) => c.name).join(' → ')}. ${C.COURSES.map((c) => lapsFor(c)).join(' / ')} laps. Points 10-8-6-5-4-3-2-1.`;
     } else {
-      const t = C.buildTrack(def), len = Math.round(t.length);
+      const t = menuTrack(def), len = Math.round(t.length);
       $('courseBlurb').textContent = `${def.blurb} Lap ${len} m • ${lapsFor(def)} laps = ${(len * lapsFor(def) / 1000).toFixed(1)} km${timeNote}`;
     }
-    $('course').disabled = cfg.mode === 'champ';
+    $('courseCards').querySelectorAll('button').forEach((b) => { b.disabled = cfg.mode === 'champ'; b.setAttribute('aria-pressed', String(cfg.mode !== 'champ' && b.dataset.v === def.id)); });
+    $('lenSeg').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(cfg.laps === lapsForMinutes(def, Number(b.dataset.min)))));
+    $('lapsVal').textContent = `${lapsFor(def)} laps, about ${Math.round(est(def))} min`;
     $('steerHint').textContent = cfg.steer === 'auto'
       ? 'Your rider follows the wheel in front for the draft, pulls out to overtake when you are going faster, and dodges obstacles. No controller needed.'
       : 'Steer with the Zwift Ride controls or the keyboard arrows.';
     $('autoItemsRow').hidden = cfg.steer !== 'auto';
-    $('lapsVal').textContent = cfg.laps; $('feelVal').textContent = Math.round(cfg.gradeFeel * 100) + '%'; $('sensVal').textContent = cfg.sens.toFixed(1) + '×';
+    $('feelVal').textContent = Math.round(cfg.gradeFeel * 100) + '%'; $('sensVal').textContent = cfg.sens.toFixed(1) + '×';
 
     // your category badge + what the rivals will ride
     const badge = $('catBadge'), cat = C.RIVAL_CATS[cfg.cat];
@@ -397,7 +430,7 @@
   const newChamp = () => ({ round: 0, rounds: C.COURSES.map((c) => c.id), pts: {}, pending: null, finalShown: false });
 
   function startRace() {
-    C.audio.unlock();
+    C.audio.unlock(); logUnfinished(); state.logged = false;
     state.race = makeRace(); state.mode = 'race'; state.paused = false; state.pauseMsg = ''; state.toasts = []; state.resultsShown = false;
     state.powerSum = state.powerT = state.maxPower = 0; state.powerLog = []; state.sampleSum = state.sampleN = state.sampleT = 0; state.lapTimes = []; state.lastTick = null;
     state.place = state.placeCand = 0; state.placeTimer = 0;
@@ -409,6 +442,7 @@
     acquireWake();
   }
   function toMenu() {
+    logUnfinished();
     state.mode = 'menu'; state.paused = false; state.champ = null; $('menu').hidden = false; $('results').hidden = true; $('pause').hidden = true; makeDemo(); menuDirty = true; releaseWake();
     if (trainer.link) trainer.link.setGrade(0);
   }
@@ -477,6 +511,37 @@
     ctx.font = '700 12px sans-serif'; ctx.fillStyle = '#1b1b2f'; ctx.fillText(`FTP ${cfg.ftp} W`, 6, y - 4);
   }
 
+  // ---------- Training log (kept on this device) ----------
+  const F = C.fitness;
+  const mins = (secs) => (secs >= 3600 ? `${Math.floor(secs / 3600)} h ${Math.round((secs % 3600) / 60)} min` : `${Math.round(secs / 60)} min`);
+  function renderTraining() {
+    const hist = store.get('history', []), wk = F.weekly(hist, Date.now()), strip = $('weekStrip'), box = $('trainBox');
+    strip.hidden = !hist.length;
+    if (!hist.length) return;
+    const tile = (v, l, cls = '') => `<div class="${cls}"><b>${v}</b><span>${l}</span></div>`;
+    strip.innerHTML = tile(wk.rides, wk.rides === 1 ? 'ride this week' : 'rides this week') + tile(mins(wk.secs), 'ridden') + tile(Math.round(wk.kj) + ' kJ', 'energy') + (wk.streak > 1 ? tile(wk.streak + ' days', 'in a row', 'fire') : '');
+    const rec = F.records(hist), bests = F.EFFORTS.filter(([w]) => rec.power[w]).map(([w, l]) => `<span>${l}: ${rec.power[w]} W</span>`).join('');
+    const rows = hist.slice(-4).reverse().map((h) => `<li><span>${new Date(h.t).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' })} · ${h.courseName}</span><em>P${h.place}/${h.field}</em><em>${mins(h.secs)}</em><em>${Math.round(h.avg)} W</em><em>${Math.round(h.kj)} kJ</em></li>`).join('');
+    box.className = ''; box.style.marginTop = '0';
+    box.innerHTML = `<div class="stats" style="margin-top:0">${[[wk.rides, 'rides (7 days)'], [mins(wk.secs), 'time'], [Math.round(wk.kj) + ' kJ', 'energy'], [Math.round(wk.tss), 'training load']].map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('')}</div>`
+      + (bests ? `<div class="hint">Your best efforts</div><div class="bests">${bests}</div>` : '') + `<ul class="rides">${rows}</ul>`;
+  }
+  $('btnClearLog2').addEventListener('click', () => { if (confirm('Delete your training log from this device?')) { store.set('history', []); $('trainBox').className = 'hint'; $('trainBox').textContent = 'Training log cleared.'; $('weekStrip').hidden = true; } });
+
+  // Add the ride to the training log (once per race) and report what it improved on. Very short rides aren't logged.
+  function logRide(race, np) {
+    const sum = F.summarize(state.powerLog, cfg.ftp, np);
+    if (state.logged || sum.secs < 30) return { sum, prs: [] };
+    state.logged = true;
+    const hist = store.get('history', []), res = race.results(), me = res.find((r) => r.isPlayer), def = C.COURSES.find((c) => c.id === currentCourseId()) || C.COURSES[0];
+    const entry = { t: Date.now(), course: def.id, courseName: def.name, laps: race.laps, place: me.place, field: res.length, finished: me.time != null, secs: sum.secs, avg: Math.round(sum.avg), np: Math.round(sum.np), kj: Math.round(sum.kj), tss: Math.round(sum.tss * 10) / 10, bests: sum.bests };
+    const prs = F.newRecords(hist, entry);
+    hist.push(entry); store.set('history', hist.slice(-80)); renderTraining();
+    return { sum, prs };
+  }
+  // Quitting or restarting part-way still counts as training: keep rides of two minutes or more.
+  function logUnfinished() { if (state.mode === 'race' && state.race && !state.resultsShown && state.powerLog.length >= 120) logRide(state.race, C.normalizedPower(state.powerLog)); }
+
   function roundPoints(results) { const out = {}; results.forEach((r, i) => { out[r.name] = POINTS[i] || 0; }); return out; }
   function commitRound() {
     const c = state.champ; if (!c || !c.pending) return;
@@ -508,8 +573,18 @@
     const avg = state.powerT ? Math.round(state.powerSum / state.powerT) : 0, np = normalizedPower(state.powerLog);
     const best = state.lapTimes.length ? C.fmtTime(Math.min(...state.lapTimes)) : '–';
     const stat = (v, l) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`;
+    const me = res.find((r) => r.isPlayer), def = C.COURSES.find((c) => c.id === currentCourseId()) || C.COURSES[0];
+    const { sum, prs } = logRide(race, np);
+    $('resultsPrs').hidden = !prs.length; $('resultsPrs').innerHTML = prs.map((x) => `<li>New record! ${x}</li>`).join('');
+    $('resultsSub').textContent = `${def.name} · ${race.laps} laps · ${(race.total / 1000).toFixed(1)} km${me.time != null ? ' · ' + C.fmtTime(me.time) : ''}`;
+    const zt = sum.zones, zcol = C.ZONES.map((z) => z[1]);
+    $('zoneBar').innerHTML = zt.map((t, i) => (t ? `<i style="flex:${t};background:${zcol[i]}" title="${F.ZONE_LABELS[i]}: ${C.fmtTime(t).replace(/\.\d$/, '')}"></i>` : '')).join('');
+    $('zoneLegend').innerHTML = zt.map((t, i) => (t ? `<span><i style="background:${zcol[i]}"></i>${F.ZONE_LABELS[i]} ${C.fmtTime(t).replace(/\.\d$/, '')}</span>` : '')).join('');
+    const note = F.sessionNote(sum); $('resultsNote').hidden = !note; $('resultsNote').textContent = note;
     const hrs = recorder.samples.map((x) => x.hr).filter((x) => x > 0), hrAvg = hrs.length ? Math.round(hrs.reduce((a, b) => a + b, 0) / hrs.length) : 0, hrMax = hrs.length ? Math.round(Math.max(...hrs)) : 0;
-    $('resultsStats').innerHTML = (hrs.length ? stat(hrAvg + ' bpm', 'avg heart rate') + stat(hrMax + ' bpm', 'max heart rate') : '') + stat(avg + ' W', 'avg power') + stat(np ? Math.round(np) + ' W' : '–', 'normalized') + stat((avg / cfg.weight).toFixed(2), 'W/kg') + stat(Math.round(state.maxPower) + ' W', 'max') + stat(best, 'best lap');
+    $('resultsStats').innerHTML = stat(avg + ' W', 'avg power') + stat(np ? Math.round(np) + ' W' : '–', 'normalized') + stat((avg / cfg.weight).toFixed(2), 'W/kg') + stat(Math.round(state.maxPower) + ' W', 'max')
+      + stat(Math.round(sum.kj) + ' kJ', 'work done') + stat('≈' + Math.round(sum.kcal), 'kcal burned') + stat(sum.if_.toFixed(2), 'intensity (IF)') + stat(Math.round(sum.tss), 'training load')
+      + (hrs.length ? stat(hrAvg + ' bpm', 'avg heart rate') + stat(hrMax + ' bpm', 'max heart rate') : '') + stat(best, 'best lap');
     const player = res.find((r) => r.isPlayer);
     $('resultsTitle').textContent = player.place === 1 ? '🏆 YOU WON!' : player.place <= 3 ? 'PODIUM!' : 'RESULTS';
     // championship panel
@@ -613,7 +688,7 @@
       renderer.render(race, state.paused ? 0 : dt, {
         mirror,
         power: p.pw, cadence: cadenceNow(now) || (trainer.link ? 0 : (p.v > 0.5 ? Math.round(p.rpm) : 0)), hr: hrNow(now), maxHr: cfg.maxHr || 190, ftp: cfg.ftp, weight: cfg.weight,
-        toasts: state.toasts, incoming: state.incoming > 0, menu: state.mode === 'menu',
+        toasts: state.toasts, incoming: state.incoming > 0, menu: state.mode === 'menu' || state.resultsShown, kj: state.powerSum / 1000,
         fps: cfg.showFps && state.mode === 'race' ? `${Math.round(perf.fps)} fps · ${perf.level} · ${perf.renderMs.toFixed(1)} ms` : '',
         warning: race.state === 'racing' && staleTrainer && !state.paused ? '⚠ NO POWER SIGNAL' : '',
         chips: [
@@ -626,7 +701,7 @@
     flushSnaps(now);
   }
 
-  refreshLabels(); makeDemo();
+  refreshLabels(); makeDemo(); renderTraining();
   if (cfg.ftp == null) $('ftp').focus(); // the one thing we need from a new player
   window.CritDebug = { perf, setLevel, hr, cad, debug, tick, kb, renderer, state, cfg, trainer, ride, startRace, toMenu, showResults, onRideMessage, rideSteer };
   requestAnimationFrame(frame);

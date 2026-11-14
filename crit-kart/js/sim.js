@@ -25,6 +25,8 @@
   };
   const rivalPreview = (ftp, cat) => { const base = ftp * RIVAL_CATS[cat].factor; return { base, lo: base * 0.96, avg: base * 1.02, hi: base * 1.07 }; };
   // Zwift-style racing category from your W/kg
+  const PASS_OFF = 0.3, PASS_KEEP = 0.45; // sideways offset of an auto-follow pass (fraction of the half road), and the share of shelter it keeps
+  const DRAFT_LEN = 12, DRAFT_HALF_W = 0.36, DRAFT_W = [0.25, 0.06, 0.03, 0.01], DRAFT_MAX = 0.35, DRAFT_SCRATCH = [0, 0, 0, 0];
   const riderCategory = (wkg) => (wkg >= 4.0 ? 'A' : wkg >= 3.2 ? 'B' : wkg >= 2.5 ? 'C' : 'D');
 
   const AI_RIDERS = [
@@ -36,7 +38,7 @@
     constructor(name, color, isPlayer) {
       this.name = name; this.color = color; this.isPlayer = isPlayer;
       this.s = 0; this.x = 0; this.v = 0; this.power = 0; this.pw = 0; this.steer = 0; this.lean = 0;
-      this.item = null; this.stun = 0; this.boost = 0; this.shield = 0; this.invuln = 0; this.draft = 0;
+      this.item = null; this.stun = 0; this.boost = 0; this.shield = 0; this.invuln = 0; this.draft = 0; this.acc = 0;
       this.finished = false; this.finishTime = null; this.lap = 1; this.phase = Math.random() * 6; this.grade = 0;
       this.vehLast = -1; this.vehT = -9; this.vx = 0; this.pend = 0; this.rpm = 0; this.cadence = 0; this.cadF = 0.94 + Math.random() * 0.12; this.ghost = 1; this.status = ''; this.pSum = 0; this.pT = 0; this.hop = 0; this.wobble = 0; this.scrape = 0; this.obsLast = -1; this.obsT = -9;
       this.ai = null;
@@ -117,14 +119,19 @@
       r.pw += (r.power - r.pw) * (1 - Math.exp(-dt / 0.5));
       if (!racing) { r.lean = 0; return; }
 
-      // drafting
-      let best = 0;
+      // Drafting, Zwift-style: about 25 % less drag on one wheel, up to 35 % deep in a bunch. The shelter is strongest within
+      // a couple of bike lengths, fades out by ~12 m and to the sides, and does little at walking pace. It eases in and out.
+      const dc = DRAFT_SCRATCH; dc[0] = dc[1] = dc[2] = dc[3] = 0;
       for (const o of this.riders) {
         if (o === r) continue;
-        const d = o.s - r.s;
-        if (d > 0.4 && d < 9 && Math.abs(o.x - r.x) < 0.3) best = Math.max(best, (1 - d / 9) * (1 - 0.5 * Math.abs(o.x - r.x) / 0.3));
+        const d = o.s - r.s, a = Math.abs(o.x - r.x) / DRAFT_HALF_W;
+        if (d <= 0.3 || d >= DRAFT_LEN || a >= 1) continue;
+        const u = d < 2.5 ? 0 : (d - 2.5) / (DRAFT_LEN - 2.5);
+        let c = (1 - u * u * (3 - 2 * u)) * (1 - a * a);
+        for (let i = 0; i < 4; i++) if (c > dc[i]) { const t = dc[i]; dc[i] = c; c = t; }
       }
-      r.draft += (best - r.draft) * Math.min(1, dt * 4);
+      const shelter = (DRAFT_W[0] * dc[0] + DRAFT_W[1] * dc[1] + DRAFT_W[2] * dc[2] + DRAFT_W[3] * dc[3]) * clamp((r.v - 3) / 5, 0, 1) / DRAFT_MAX;
+      r.draft += (shelter - r.draft) * (1 - Math.exp(-dt / 0.6));
 
       if (!r.finished) { r.pSum += r.pw * dt; r.pT += dt; }
       const grade = this.track.gradeAt(r.s); r.grade = grade;
@@ -134,10 +141,12 @@
       if (r.stun > 0) { P = 0; brake = 250; }
       const off = Math.abs(r.x) > 1 ? 0.03 : 0;
       const m = this.mass + 2;
-      const cda = CDA * (1 - 0.38 * r.draft);
+      const cda = CDA * (1 - DRAFT_MAX * r.draft);
       const F = (P * EFF) / Math.max(r.v, 1.2)
         - (m * G * ((CRR + off) * Math.cos(theta) + Math.sin(theta)) + 0.5 * RHO * cda * r.v * r.v + brake);
+      const v0 = r.v;
       r.v = Math.max(0, r.v + (F / m) * dt);
+      r.acc += ((r.v - v0) / dt - r.acc) * Math.min(1, dt * 3); // smoothed acceleration (auto-follow compares against it)
       if (r.pend > 0) { const take = r.pend * Math.min(1, dt * 7); r.v = Math.max(0, r.v - take); r.pend -= take; } // impacts bleed speed over ~0.2 s instead of cutting it
       r.s += r.v * dt;
       const rpmT = r.pw < 15 || r.v < 0.5 ? 0 : (r.cadence > 0 ? r.cadence : clamp((58 + r.pw * 0.14 + r.v * 1.2) * r.cadF, 50, 105));
@@ -162,7 +171,9 @@
       // Overlapping rivals turn slightly see-through so a crowded start or a pass stays readable.
       let overlap = false;
       if (!r.isPlayer) for (const o of this.riders) if (o !== r && Math.abs(o.s - r.s) < 1.6 && Math.abs(o.x - r.x) < 0.2) { overlap = true; break; }
-      r.ghost += ((overlap ? 0.62 : 1) - r.ghost) * Math.min(1, dt * 8);
+      // A rival sitting right on top of you would hide your own rider: those fade further, most of all the ones nearer the camera.
+      const pl = this.player, onMe = !r.isPlayer && Math.abs(pl.s - r.s) < 2.4 && Math.abs(pl.x - r.x) < 0.24;
+      r.ghost += ((onMe ? (r.s < pl.s ? 0.25 : 0.45) : overlap ? 0.62 : 1) - r.ghost) * Math.min(1, dt * 8);
 
       r.lap = clamp(Math.floor(Math.max(0, r.s) / this.length) + 1, 1, this.laps);
       if (!r.finished && r.s >= this.total) {
@@ -451,6 +462,12 @@
     // Steering for a rider who can't steer. Sit in the wheel of the rider ahead (that's where the draft is); if we're going
     // faster than them, pull out to the freer side and pass, then pick up the next wheel. Always dodge obstacles and grab
     // boxes that don't cost us the draft.
+    // Power (W) a rider needs to hold speed v on their own, with no shelter.
+    soloPower(r, v, shelter = 0) {
+      const th = Math.atan(this.track.gradeAt(r.s)), m = this.mass + 2;
+      return (m * G * (CRR * Math.cos(th) + Math.sin(th)) + 0.5 * RHO * CDA * (1 - DRAFT_MAX * shelter) * v * v) * v / EFF;
+    }
+
     autoSteerFor(r, dt = 1 / 60) {
       const L = this.length, lim = this.track.wallsAt(r.s) ? 0.75 : 0.95, st = r._auto || (r._auto = { ot: null });
       // the wheel to follow: close ahead AND close to our line (a rider two lanes over is no use for the draft)
@@ -458,19 +475,34 @@
       for (const o of this.riders) { if (o === r || o.finished) continue; const d = o.s - r.s; if (d <= 0.3 || d >= 30) continue; const sc = d + 14 * Math.abs(o.x - r.x); if (sc < bestScore) { bestScore = sc; lead = o; bd = d; } }
       st.lead = lead;
       let tx = 0;
+      // As in Zwift, you sit on the wheel until you put out the power to go past: `strong` says our power would hold more
+      // than the leader's speed once we pull out (held for a moment, so one pedal stroke doesn't count). Nobody is braked:
+      // riders are ghosts, so a rider who is only quicker thanks to the shelter drifts up through the wheel and back again.
+      const P = r.pw * (r.boost > 0 ? 1.45 : 1);
+      // (the leader's own acceleration counts: off the line everybody is speeding up together, and that is no reason to pull out)
+      // Passing is a close slip-past (riders are ghosts), which keeps a little under half of the shelter we have now; and a
+      // rider who is sheltered themselves (mid-bunch) can be passed in most of that same shelter.
+      const needFor = (o) => { const v = Math.max(o.v, 1.5) + 0.3; return this.soloPower(r, v, Math.max(PASS_KEEP * r.draft, 0.85 * o.draft)) + (this.mass + 2) * Math.max(0, o.acc + 0.04) * v / EFF; };
+      const strongFor = (o) => P > needFor(o);
       if (st.ot) { // finish the pass we started
         const t = st.ot.rider, d = t.s - r.s;
-        if (d < -3 || d > 40) st.ot = null; else tx = t.x + st.ot.side * 0.5;
+        st.otWeak = strongFor(t) || d < 0.5 ? 0 : (st.otWeak || 0) + dt;
+        st.ot.t += dt; if (st.ot.t > 4) { if (st.ot.d0 - d < 0.5) st.otWeak = 9; st.ot.t = 0; st.ot.d0 = d; } // every few seconds: are we actually getting past?
+        if (d < -3 || d > 9 || t.finished || st.otWeak > 1) { if (d >= -3) st.passT = 0; st.ot = null; st.otWeak = 0; } // done (keep the momentum for the next wheel), or they rode away / we ran out of legs: tuck back in
+        else tx = t.x + st.ot.side * st.ot.off;
       }
       if (!st.ot && lead) {
-        const closing = r.v - lead.v;
-        // clearly faster: pull out early. Only slightly faster (we just creep up in the draft): stay tucked in until we're nearly on their wheel.
-        const trigger = closing > 0.6 ? clamp(3 + 3 * closing, 3, 10) : 1.8;
-        if (bd < trigger && closing > 0.05) {
+        const closing = r.v - lead.v, strong = strongFor(lead);
+        st.passT = strong ? Math.min(1, (st.passT || 0) + dt) : Math.max(0, (st.passT || 0) - dt * 2);
+        const go = (st.passT > 0.5 && closing > 0.15) || lead.stun > 0;
+        // clearly faster: pull out early. Otherwise stay tucked in until we're nearly on their wheel.
+        const trigger = closing > 0.6 ? clamp(3 + 3 * closing, 3, 10) : 2.4;
+        if (bd < trigger && go) {
           let side = lead.x > 0.1 ? -1 : lead.x < -0.1 ? 1 : (r.x >= lead.x ? 1 : -1); // toward the middle of the road
-          const free = (sd) => { const cx = lead.x + sd * 0.5; return Math.abs(cx) <= lim && !this.riders.some((o) => o !== r && o !== lead && !o.finished && o.s - r.s > -2 && o.s - r.s < 14 && Math.abs(o.x - cx) < 0.25); };
-          if (!free(side) && free(-side)) side = -side;
-          st.ot = { rider: lead, side }; tx = lead.x + side * 0.5;
+          const off = PASS_OFF;
+          const free = (sd) => { const cx = lead.x + sd * off; return Math.abs(cx) <= lim && !this.riders.some((o) => o !== r && o !== lead && !o.finished && o.s - r.s > -2 && o.s - r.s < 14 && Math.abs(o.x - cx) < 0.25); };
+          if (!free(side) && free(-side) && Math.abs(lead.x - side * off) <= 0.72) side = -side; // (riders are ghosts: a busy lane beats the gutter)
+          st.ot = { rider: lead, side, off, t: 0, d0: bd }; tx = lead.x + side * off;
         } else tx = lead.x;
       }
       if (!r.item && !st.ot) { // boxes: only small detours while tucked in behind someone
@@ -510,5 +542,5 @@
     return lapT * 1.15; // allowance for the standing start, cornering and obstacles
   }
 
-  Object.assign(C, { Race, Rider, ITEMS, CDA, estimateLapTime, RIVAL_CATS, rivalPreview, riderCategory });
+  Object.assign(C, { Race, Rider, ITEMS, CDA, DRAFT_MAX, estimateLapTime, RIVAL_CATS, rivalPreview, riderCategory });
 })();
