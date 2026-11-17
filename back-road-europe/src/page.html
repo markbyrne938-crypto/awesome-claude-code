@@ -1,1 +1,41 @@
-<title>Back Road Europe</title><style>/*STYLE*/</style><script>/*DATA*/</script><script>/*CODE*/</script>
+<title>Back Road Europe</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="A daily Europe game: seven prompts with many right answers, where the least obvious answer scores most.">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:ital,wght@0,500;0,700;0,900;1,500&family=Overpass+Mono:wght@500;700&family=Figtree:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap">
+<style>/*STYLE*/</style>
+<div class="app" id="app">
+  <header class="top">
+    <div class="brand"><h1>Back Road <span>Europe</span></h1><p class="mode" id="mode"></p></div>
+    <nav class="tools" aria-label="Menu">
+      <button class="tool" id="b-help" type="button">How to play</button>
+      <button class="tool" id="b-record" type="button">Record</button>
+      <button class="tool" id="b-tables" type="button">Tables</button>
+      <button class="tool" id="b-duel" type="button">Duel</button>
+      <button class="tool" id="b-settings" type="button">Settings</button>
+      <button class="tool" id="b-sound" type="button" aria-pressed="true">Sound on</button>
+      <button class="tool" id="b-owner" type="button" hidden>Owner</button>
+    </nav>
+    <div class="odo" id="odo" role="img" aria-label="0 points"></div>
+  </header>
+  <div class="banner" id="banner" role="status" hidden></div>
+  <div class="layout">
+    <section class="map-wrap" aria-label="Map">
+      <div class="map" id="map" tabindex="0">
+        <svg id="svg" role="img" aria-label="Map of Europe"></svg>
+        <div class="tag tl" id="tagL"></div><div class="tag tr" id="tagR"></div><div class="tag bl" id="tagB"></div>
+        <div class="zoom"><button id="z-in" type="button">+</button><button id="z-out" type="button">−</button><button id="z-fit" type="button">⤢</button></div>
+        <div class="pop" id="pop" hidden></div>
+      </div>
+      <p class="sr" id="route-desc"></p>
+      <ol class="pips" id="pips"></ol>
+    </section>
+    <main class="panel" id="stage" aria-live="polite"></main>
+  </div>
+</div>
+<div class="sr" id="announce" aria-live="assertive"></div>
+<div class="toast" id="toast" role="status" hidden></div>
+<dialog id="dlg"><div id="dlg-body"></div><div class="dlg-foot"><button class="go" id="dlg-close" type="button">Close</button></div></dialog>
+<script>/*DATA*/</script>
+<script>/*CODE*/</script>

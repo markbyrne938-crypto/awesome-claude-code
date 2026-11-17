@@ -181,7 +181,8 @@ const lakes = compress(gp({ type: "FeatureCollection", features: geo("ne_50m_lak
 const RANGE_NAMES = { "Alps": 1, "Pyrenees": 1, "Carpathian Mountains": 1, "Caucasus Mountains": 1, "Scandinavian Mountains": 1, "Dinaric Alps": 2, "Balkan Mountains": 2,
   "Apennines": 2, "Appennino Ligure": 0, "Cantabrian Mountains": 2, "Sierra Nevada": 3, "Tatra Mountains": 3, "Pindus": 2, "Southern Carpathians": 0, "Jura Mountains": 3,
   "Vosges Mountains": 3, "Ardennes": 3, "Harz": 3, "Sudetes": 3, "Ore Mountains": 3, "Cambrian Mountains": 3, "Pontic Mountains": 2, "Taurus mountains": 2, "Lesser Caucasus": 2, "Sierra Morena": 3 };
-const ranges = geo("ne_10m_geography_regions_polys").filter(f => f.geometry && inView(f.geometry) && /Range/.test(f.properties.FEATURECLA))
+const NOT_EUROPE_RANGES = /Atlas|Rif|Lebanon|Zagros|Elburz|Kuhrud/;
+const ranges = geo("ne_10m_geography_regions_polys").filter(f => f.geometry && inView(f.geometry) && /Range/.test(f.properties.FEATURECLA) && !NOT_EUROPE_RANGES.test(f.properties.NAME_EN))
   .map(f => { const n = f.properties.NAME_EN; const [lon, lat] = geoCentroid(f); const [x, y] = XY(lat, lon); return { d: compress(gp(f)), n: RANGE_NAMES[n] ? n.replace(" mountains", " Mountains") : "", k: RANGE_NAMES[n] || 3, x, y }; })
   .filter(r => r.d);
 const SEAS = [["Atlantic Ocean", -17, 47, 1], ["North Sea", 3.2, 56.4, 2], ["Norwegian Sea", 2, 67, 2], ["Barents Sea", 40, 71, 2], ["Baltic Sea", 19.3, 56.3, 2],
@@ -383,7 +384,8 @@ note("prompts by category: " + JSON.stringify(count) + " total " + prompts.lengt
 const D = {
   v: new Date().toISOString().slice(0, 10), rule: RULE, map: { ...map, proj: PROJ },
   countries: countries.map(c => ({ id: c.id, n: c.n, the: c.the || 0, cap: c.cap, f: c.fame, lat: c.lat, lon: c.lon, area: c.area, pop: c.pop && Math.round(c.pop * 1000) / 1000,
-    nb: c.nb, nbAll: c.nbAll.length, cur: c.cur, fam: c.fam, tz: c.tz, alt: c.alt, nat: c.native, capAlt: c.capAlt })),
+    nb: c.nb, nbAll: c.nbAll.length, cur: c.cur, fam: c.fam, tz: c.tz, alt: c.alt, nat: c.native, capAlt: c.capAlt,
+    loc: Object.fromEntries(["fr", "de", "es", "it"].map(l => [l, i18n.getName(c.id, l, { select: "official" }) || c.n])) })),
   places: PL, prompts, world, notes, parts: PARTS, partCaps: PART_CAPITALS, clauses: CLAUSES, letterT: LETTER_T, regions: REGIONS.map(r => ({ key: r.key, cc: r.cc, names: r.names, en: r.en })),
 };
 const page = rd("src/page.html");
