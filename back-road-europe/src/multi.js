@@ -49,7 +49,12 @@ function publishFinished(r) {
   if (Net.kind === "local" || !(r.type === "daily" || r.type === "archive")) return;
   const entry = resultEntry(r);
   if (r.day < cetNow().day) entry.ans = r.ans.map(a => a.k); // the route has closed, so the answers can show straight away
-  postResult(r.day, entry).then(() => { if (entry.ans) STORE.revealed[r.day] = 1; saveAll(); }).catch(() => toast(t("saveFailed")));
+  postResult(r.day, entry).then(res => {
+    if (entry.ans) STORE.revealed[r.day] = 1;
+    const h = STORE.hist[r.day]; // the server scores runs itself; its numbers are the record
+    if (res && h && res.verified && (h.pts !== res.pts || h.tiers !== res.tiers)) { h.pts = res.pts; h.tiers = res.tiers; }
+    saveAll();
+  }).catch(() => toast(t("saveFailed")));
 }
 function revealClosedDays() {
   if (Net.kind === "local") return;

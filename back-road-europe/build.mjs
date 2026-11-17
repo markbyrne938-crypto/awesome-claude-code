@@ -398,5 +398,9 @@ const html = page.replace("/*STYLE*/", css).replace("/*DATA*/", "const D=" + JSO
 fs.mkdirSync(path.join(ROOT, "dist"), { recursive: true });
 fs.writeFileSync(path.join(ROOT, "dist/index.html"), html);
 fs.writeFileSync(path.join(ROOT, "dist/report.txt"), report.join("\n") + "\n");
+// The same data, matching, dealing and scoring code for the standalone server, so it can judge answers and score runs itself.
+const engine = "const D=" + JSON.stringify({ ...D, map: { proj: PROJ } }) + ";\n" + ["shared.js", "i18n.js", "core.js"].map(f => rd("src/" + f)).join("\n;\n") +
+  "\n;ENGINE = { D, C, getPrompt, judge, usedKey, pointsTable, tierOf, dayRoute, practiceRoute, summarise, EXTRA, CACHE, MAPS, RARITY_CACHE, DEAL, cetNow };\n";
+fs.writeFileSync(path.join(ROOT, "dist/engine.js"), engine);
 const kb = n => (n / 1024).toFixed(0) + " KB";
 console.log(`dist/index.html ${kb(html.length)} (data ${kb(JSON.stringify(D).length)}, code ${kb(js.length)}, css ${kb(css.length)}); ${prompts.length} prompts ${JSON.stringify(count)}; ${report.filter(r => r.startsWith("WARN")).length} warnings → dist/report.txt`);

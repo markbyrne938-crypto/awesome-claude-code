@@ -44,6 +44,7 @@ const C = {};
 for (const c of D.countries) { const [x, y] = project(c.lat, c.lon); C[c.id] = { ...c, x, y }; }
 const countryName = id => !id ? "" : (C[id] && ((C[id].loc && C[id].loc[LANG]) || C[id].n)) || id;
 const capitalName = id => C[id] ? C[id].cap : id;
+const inName = id => (LANG === "en" && C[id] && C[id].the ? "the " : "") + countryName(id);
 
 /* ---------- prompts ---------- */
 const PROMPT_INDEX = new Map(D.prompts.map((p, i) => [p.id, i]));
@@ -113,8 +114,8 @@ function fuzzy(key, sources) {
     if (Math.abs(k.length - key.length) > max) continue;
     if (k[0] !== key[0] && !(k[0] === key[1] && k[1] === key[0])) continue;
     const d = osa(key, k, max);
-    if (d < bestD) { bestD = d; best = { tag, v, k }; tie = false; }
-    else if (d === bestD && best && (best.tag !== tag || JSON.stringify(best.v) !== JSON.stringify(v))) tie = true;
+    if (d < bestD) { bestD = d; best = { tag, v, k, d }; tie = false; }
+    else if (d === bestD && best && JSON.stringify(best.v) !== JSON.stringify(v)) tie = true;
   }
   return best && !tie ? best : null;
 }
@@ -126,35 +127,35 @@ function judge(P, text, used) {
   const pm = promptMap(P), g = globalDict();
   let idx = firstHit(pm, keys), gh = idx === undefined ? firstHit(g, keys) : undefined, typo = false, note = "";
   if (idx === undefined && gh === undefined) {
-    const f = fuzzy(fold(keys[0]), [[pm, "p"], [g, "g"]]) || fuzzy(keys[0], [[pm, "p"], [g, "g"]]);
-    if (f && f.tag === "p") { idx = f.v; typo = true; } else if (f) { gh = f.v; typo = true; }
+    const fp = fuzzy(keys[0], [[pm, "p"]]) || fuzzy(fold(keys[0]), [[pm, "p"]]), fg = fuzzy(keys[0], [[g, "g"]]) || fuzzy(fold(keys[0]), [[g, "g"]]);
+    if (fp && (!fg || fg.d >= fp.d)) { idx = fp.v; typo = true; } else if (fg) { gh = fg.v; typo = true; }
   }
   const nm = s => `“${s}”`;
   if (idx === undefined && gh) {
     const hasCC = cc => P.items.findIndex(it => it.cc === cc && (P.kind !== "hand" || norm(it.label) === norm(C[cc].n)));
     if (gh.t === "part" && isCountryPrompt(P)) {
       const i = hasCC(gh.id);
-      if (i >= 0) { idx = i; note = t("countedAs", { x: gh.name, c: countryName(gh.id) }); }
-      else return { ok: false, msg: t("partOf", { x: gh.name, c: countryName(gh.id) }), miss: P.kind === "hand" };
+      if (i >= 0) { idx = i; note = t("countedAs", { x: gh.name, c: inName(gh.id) }); }
+      else return { ok: false, msg: t("partOf", { x: gh.name, c: inName(gh.id) }), miss: P.kind === "hand" };
     } else if (gh.t === "world") {
       return { ok: false, msg: D.notes[gh.cc] || t("notEurope", { x: gh.name }), miss: P.kind === "hand" };
     } else if (P.kind === "c") {
       if (gh.t === "country") return { ok: false, msg: t("noFit", { x: countryName(gh.id) }) };
       if (gh.t === "capital") return { ok: false, msg: t("isCapital", { x: gh.name, c: countryName(gh.id) }) };
       if (gh.t === "partcap") return { ok: false, msg: t("partCap", { x: gh.name, p: gh.of }) };
-      if (gh.t === "place") return { ok: false, msg: t("isTown", { x: gh.name, c: countryName(gh.cc) }) };
+      if (gh.t === "place") return { ok: false, msg: t("isTown", { x: gh.name, c: inName(gh.cc) }) };
     } else if (P.kind === "k") {
       if (gh.t === "capital") return { ok: false, msg: t("noFit", { x: gh.name }) };
       if (gh.t === "country") return { ok: false, msg: t("isCountry", { x: countryName(gh.id) }) };
       if (gh.t === "partcap") return { ok: false, msg: t("partCap", { x: gh.name, p: gh.of }) };
-      if (gh.t === "part") return { ok: false, msg: t("partOf", { x: gh.name, c: countryName(gh.id) }) };
-      if (gh.t === "place") return { ok: false, msg: t("isTownK", { x: gh.name, c: countryName(gh.cc) }) };
+      if (gh.t === "part") return { ok: false, msg: t("partOf", { x: gh.name, c: inName(gh.id) }) };
+      if (gh.t === "place") return { ok: false, msg: t("isTownK", { x: gh.name, c: inName(gh.cc) }) };
     } else if (P.kind === "city") {
       const near = P.near.find(n => [n.label, ...n.alts].some(a => keysOf(a).some(k => keys.includes(k))));
       if (near) return { ok: false, msg: t("tooSmall", { x: near.label, n: fmtN(near.pop), t: fmtN(P.region.n) }) };
-      if (gh.t === "place") return { ok: false, msg: t("elsewhere", { x: gh.name, c: countryName(gh.cc) }), miss: true };
+      if (gh.t === "place") return { ok: false, msg: t("elsewhere", { x: gh.name, c: inName(gh.cc) }), miss: true };
       if (gh.t === "country" || gh.t === "part") return { ok: false, msg: t("nameTown") };
-      if (gh.t === "capital") return { ok: false, msg: t("elsewhere", { x: gh.name, c: countryName(gh.id) }), miss: true };
+      if (gh.t === "capital") return { ok: false, msg: t("elsewhere", { x: gh.name, c: inName(gh.id) }), miss: true };
     } else if (isCountryPrompt(P) && gh.t === "country") {
       return { ok: false, msg: t("noFit", { x: countryName(gh.id) }), miss: true };
     }
@@ -201,20 +202,28 @@ const tierOf = pts => pts == null || pts < 0 ? 0 : pts >= 95 ? 5 : pts >= 80 ? 4
 
 /* ---------- dealing ---------- */
 function conflicts(P, chosen) { return chosen.some(o => o.tags.some(tg => P.tags.includes(tg) && tg !== "towns")); }
-// Each slot cycles through its own shuffled list, so nothing in a slot repeats until the whole slot has been used.
-function dayRoute(day, overrides = []) {
-  const d = day - DAY1, chosen = [];
-  for (const slot of SLOTS) {
-    const own = overrides.find(o => catOf({ c: o.c }) === slot && o.day === day);
-    if (own && getPrompt(own.id)) { chosen.push(getPrompt(own.id)); continue; }
-    const ids = CATEGORY[slot] || [], n = ids.length;
-    if (!n) continue;
-    const cycle = Math.floor(Math.max(0, d) / n), pos = ((d % n) + n) % n;
-    const perm = shuffle(ids, rng(hashStr(slot) ^ (cycle * 7919 + 17)));
-    let pick = null;
-    for (let j = 0; j < n && !pick; j++) { const P = getPrompt(perm[(pos + j) % n]); if (P && !conflicts(P, chosen)) pick = P; }
-    if (pick) chosen.push(pick);
+// Each slot works through its own shuffled list, so nothing in a slot repeats until the whole slot has been used.
+// When a pick clashes in theme with another slot that day, it swaps with a later prompt in the same cycle.
+const DEAL = { day: DAY1 - 1, cyc: {}, out: new Map() };
+function dealThrough(day) {
+  while (DEAL.day < day) {
+    const d = ++DEAL.day - DAY1, chosen = [];
+    for (const slot of SLOTS) {
+      const ids = CATEGORY[slot] || [], n = ids.length; if (!n) continue;
+      let c = DEAL.cyc[slot];
+      if (!c || c.pos >= n) { const k = c ? c.k + 1 : 0; c = DEAL.cyc[slot] = { k, pos: 0, perm: shuffle(ids, rng(hashStr(slot) ^ (k * 7919 + 17))) }; }
+      let j = c.pos;
+      while (j < n && conflicts(getPrompt(c.perm[j]), chosen)) j++;
+      if (j < n && j !== c.pos) [c.perm[c.pos], c.perm[j]] = [c.perm[j], c.perm[c.pos]];
+      chosen.push(getPrompt(c.perm[c.pos])); c.pos++;
+    }
+    DEAL.out.set(DEAL.day, chosen);
   }
+}
+function dayRoute(day, overrides = []) {
+  dealThrough(day);
+  let chosen = (DEAL.out.get(day) || []).slice();
+  for (const o of overrides) if (o.day === day && getPrompt(o.id)) { const i = chosen.findIndex(P => P.cat === catOf({ c: o.c })); if (i >= 0) chosen[i] = getPrompt(o.id); }
   return order7(chosen, day).map(P => P.id);
 }
 function practiceRoute(seed) {
@@ -244,7 +253,7 @@ function makeCode(run, name) {
   const ans = run.ans.map(a => a.k < 0 ? "zz" : B36(a.k).padStart(2, "0")).join("");
   const ms = run.ans.map(a => B36(Math.min(1295, Math.round((a.ms || 0) / 100))).padStart(2, "0")).join("");
   const body = ["c2", head, ids, ans, ms, nameTo36(name) || "0"].join("-");
-  return body + "-" + (hashStr(body) % 1679616).toString(36).padStart(4, "0");
+  return body + "-" + (hashStr(body.toLowerCase()) % 1679616).toString(36).padStart(4, "0");
 }
 function parseCode(text) {
   const m = /c2-([DP])([0-9a-z]+)-([sen])-([0-9a-z]{7,})-([0-9a-z]{2,})-([0-9a-z]{2,})-([0-9a-z]+)-([0-9a-z]{4})/i.exec(String(text || ""));

@@ -7,7 +7,8 @@
   "scripts": {
     "fetch": "node tools/fetch-data.mjs",
     "build": "node build.mjs",
-    "test": "node test/run.cjs"
+    "test": "node test/run.cjs && node test/server.cjs",
+    "start": "node server/server.mjs"
   },
   "dependencies": {
     "all-the-cities": "^3.1.0",

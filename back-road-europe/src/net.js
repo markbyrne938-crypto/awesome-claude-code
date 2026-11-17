@@ -46,7 +46,7 @@ async function upsert(path, patch) {
 
 /* ---------- this player's own state: runs and record, private ---------- */
 async function loadPrivate() {
-  if (Net.kind === "artifact") { const s = await Net.db.doc(`data/users/${Net.me.id}/state/main`).get().catch(() => null); return s && s.exists ? s.data() : null; }
+  if (Net.kind === "artifact") { const s = await Net.db.doc(`data/users/${Net.me.id}/state`).get().catch(() => null); return s && s.exists ? s.data() : null; }
   if (Net.kind === "server") return api("GET", "state").catch(() => null);
   return null;
 }
@@ -55,7 +55,7 @@ function savePrivate(obj) {
   clearTimeout(privateTimer);
   privateTimer = setTimeout(() => {
     const body = JSON.parse(JSON.stringify(obj));
-    if (Net.kind === "artifact") serial("private", () => Net.db.doc(`data/users/${Net.me.id}/state/main`).set(body)).catch(() => {});
+    if (Net.kind === "artifact") serial("private", () => Net.db.doc(`data/users/${Net.me.id}/state`).set(body)).catch(() => {});
     if (Net.kind === "server") serial("private", () => api("PUT", "state", body)).catch(() => {});
   }, 800);
 }
@@ -64,7 +64,7 @@ function savePrivate(obj) {
 // While a route is open, others see your points and road types only. Answers follow once the route closes.
 async function postResult(day, entry) {
   if (Net.kind === "artifact") return serial("scores", () => upsert(`scores/${Net.me.id}`, { v: 2, days: { [day]: entry } }));
-  if (Net.kind === "server") return api("POST", "result", { day, ...entry });
+  if (Net.kind === "server") return serial("run", () => api("POST", "result", { day, ...entry })); // after the run's last answer has arrived
 }
 async function revealAnswers(map) { // map: day → answers
   if (!Object.keys(map).length) return;
@@ -150,9 +150,19 @@ async function resolveNames(ids) {
 /* ---------- standalone server ---------- */
 async function api(method, path, body) {
   const r = await fetch("api/" + path, { method, headers: { "content-type": "application/json", authorization: "Bearer " + (Net.token || "") }, body: body ? JSON.stringify(body) : undefined });
-  if (!r.ok) throw new Error(path + " " + r.status);
+  if (!r.ok) throw Object.assign(new Error(path + " " + r.status), { status: r.status });
   return r.status === 204 ? null : r.json();
 }
+// Run events go to the server one at a time and in order, retried if the connection drops.
+function runEvent(path, body) {
+  return serial("run", async () => {
+    for (let i = 0; ; i++) {
+      try { return await api("POST", path, body); }
+      catch (e) { if ((e.status && e.status < 500) || i >= 3) throw e; await new Promise(r => setTimeout(r, 700 * 2 ** i)); }
+    }
+  });
+}
+function netRename(name) { if (Net.kind === "server") api("POST", "login", { token: Net.token, name }).then(w => { if (w) Net.me.name = w.name; }).catch(() => {}); }
 async function serverInit() {
   Net.kind = "server";
   try { const h = await api("GET", "hello"); clockSkew = h.now - Date.now(); } catch { Net.kind = "local"; return; }

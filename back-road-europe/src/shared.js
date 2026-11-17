@@ -7,7 +7,7 @@ const GENERIC = new Set(["the", "of", "lake", "lago", "lac", "loch", "lough", "m
 function wordsOf(s) {
   s = String(s).toLowerCase()
     .replace(/ł/g, "l").replace(/ø/g, "o").replace(/đ/g, "d").replace(/ı/g, "i").replace(/ß/g, "ss").replace(/æ/g, "ae")
-    .replace(/œ/g, "oe").replace(/þ/g, "th").replace(/ð/g, "d").replace(/ħ/g, "h")
+    .replace(/œ/g, "oe").replace(/þ/g, "th").replace(/ð/g, "d").replace(/ħ/g, "h").replace(/ə/g, "a").replace(/ŋ/g, "ng")
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
     .replace(/&/g, " and ").replace(/['’‘`ʼ]/g, "")
     .replace(/[^a-z0-9]+/g, " ").trim();

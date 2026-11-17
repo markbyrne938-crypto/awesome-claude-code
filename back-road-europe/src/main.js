@@ -54,7 +54,14 @@ async function begin() {
 }
 function startPrompt() {
   const r = RUN; r.deadline = SECS[r.mode] ? now() + SECS[r.mode] * 1000 : 0; r.promptAt = now(); r.tried = []; r.draft = ""; r.lastNote = "";
-  if (Net.kind === "server" && (r.type === "daily")) api("POST", "start", { key: r.key, day: r.day, idx: r.idx, pids: r.pids, mode: r.mode }).then(x => { if (x && x.deadline) r.deadline = x.deadline; }).catch(() => {});
+  if (Net.kind === "server" && r.type === "daily") {
+    const idx = r.idx;
+    runEvent("start", { key: r.key, day: r.day, idx, mode: r.mode }).then(x => {
+      if (!x || RUN !== r || r.idx !== idx) return;
+      if (x.deadline) r.deadline = x.deadline; // the server's clock
+      if (idx === 0 && x.pids && x.pids.join() !== r.pids.join()) { r.pids = x.pids; touch(); show(""); } // the official route
+    }).catch(() => {});
+  }
   touch(); show(""); announce(promptText(getPrompt(r.pids[r.idx])));
 }
 function submit() {
@@ -72,12 +79,13 @@ function submit() {
   const ms = Math.max(0, now() - (r.promptAt || now()));
   r.ans.push({ k: v.idx, ms }); r.lastNote = v.note || ""; r.phase = "shown";
   const tr = tierOf(pointsTable(P, r.rare).pts[v.idx]);
-  if (Net.kind === "server" && r.type === "daily") api("POST", "answer", { key: r.key, day: r.day, idx: r.ans.length - 1, k: v.idx }).catch(() => {});
+  if (Net.kind === "server" && r.type === "daily") runEvent("answer", { key: r.key, day: r.day, idx: r.ans.length - 1, text }).catch(() => {});
   touch(); snd("good", tr); renderStage(); mapShow(mapStops(r), "leg"); duelProgress();
 }
 function timeUp() {
   const r = RUN; if (!r || r.phase !== "ask") return;
   r.ans.push({ k: -1, ms: SECS[r.mode] * 1000 }); r.phase = "shown"; r.lastNote = "";
+  if (Net.kind === "server" && r.type === "daily") runEvent("answer", { key: r.key, day: r.day, idx: r.ans.length - 1, timeout: true }).catch(() => {});
   touch(); snd("out"); renderStage(); mapShow(mapStops(r), ""); duelProgress();
 }
 function next() {
@@ -140,7 +148,7 @@ document.addEventListener("submit", e => {
   else if (id === "settings-form") {
     const lang = $("set-lang").value, timer = (document.querySelector("input[name=timer]:checked") || {}).value || "std";
     SETTINGS = { ...SETTINGS, lang, timer, sound: $("set-sound").checked, name: $("set-name").value.trim().slice(0, 20) };
-    setLang(lang); saveAll(); closeDialog(); staticTexts();
+    setLang(lang); saveAll(); closeDialog(); staticTexts(); netRename(SETTINGS.name);
     if (RUN && RUN.phase === "intro") RUN.mode = timer;
     show("");
   } else if (id === "rival-form") {
@@ -251,7 +259,8 @@ async function boot() {
   if (mergePrivate(priv)) { saveAll(); if (RUN && RUN.type === "daily" && STORE.runs[RUN.key] !== RUN && RUN.phase !== "ask") { RUN = STORE.runs[RUN.key]; show("pan"); } }
   onNet("results", () => { if (RUN && RUN.phase === "end") renderVersus(); });
   onNet("bank", list => {
-    for (const b of list) if (b.id && b.it) { EXTRA.set(b.id, { id: b.id, c: b.c, k: "hand", q: b.q, h: b.h, it: b.it, tag: b.tag || [] }); }
+    for (const b of list) if (b.id && b.it) { EXTRA.set(b.id, { id: b.id, c: b.c, k: "hand", q: b.q, h: b.h, it: b.it, tag: b.tag || [] }); CACHE.delete(b.id); MAPS.delete(b.id); }
+    RARITY_CACHE.clear();
     if (RUN && RUN.phase === "intro" && RUN.type === "daily" && !RUN.ans.length) { const p = dayRoute(RUN.day, overrides()); if (p.join() !== RUN.pids.join()) { RUN.pids = p; touch(); show(""); } }
   });
   revealClosedDays(); pruneResults(); duelInit();

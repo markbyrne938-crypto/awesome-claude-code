@@ -4,7 +4,7 @@
   --sign: #1b4b9b; --sign-ink: #ffffff; --eroad: #1c7449; --marking: #f2c230; --marking-ink: #2a2100; --bad: #b3261e;
   --sea: #c4d9e7; --sea-ink: #5f7f95; --land: #f6f3ea; --land-edge: #8a9ba6; --frontier: #c7c0b0; --grat: #b1c9d9; --relief: #e4dccb;
   --river: #8fb4cc; --road: #27303b; --odo: #18202a;
-  --t0: #8b95a0; --tk0: #ffffff; --t1: #1d4f9e; --tk1: #ffffff; --t2: #1a7a4c; --tk2: #ffffff; --t3: #f3c623; --tk3: #2a2100; --t4: #c2410c; --tk4: #ffffff; --t5: #6b3f1d; --tk5: #ffffff;
+  --t0: #5b6670; --tk0: #ffffff; --t1: #1d4f9e; --tk1: #ffffff; --t2: #1a7a4c; --tk2: #ffffff; --t3: #f3c623; --tk3: #2a2100; --t4: #c2410c; --tk4: #ffffff; --t5: #6b3f1d; --tk5: #ffffff;
   --display: "Overpass", "Helvetica Neue", Arial, sans-serif; --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: "Overpass Mono", ui-monospace, Menlo, Consolas, monospace; --emoji: "Noto Color Emoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
 }
@@ -127,6 +127,7 @@ svg.far .river { stroke-width: .7; } svg.far .border { stroke-dasharray: none; }
 .go.alt { background: transparent; color: var(--ink); border: 2px solid var(--ink); padding: 10px 16px 8px; }
 .go.sm { min-height: 44px; padding: 8px 12px 6px; font-size: .82rem; }
 .go:disabled { opacity: .5; cursor: default; }
+a.go { display: inline-flex; align-items: center; text-decoration: none; }
 .ask { display: flex; gap: 10px; }
 .ask input { flex: 1; min-width: 0; min-height: 48px; font: 500 1.15rem var(--display); padding: 10px 14px 8px; border: 2px solid var(--ink); border-radius: 8px; background: var(--surface); color: var(--ink); }
 .clock { display: flex; align-items: center; gap: 10px; }

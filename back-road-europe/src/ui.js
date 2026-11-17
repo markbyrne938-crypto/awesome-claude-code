@@ -221,7 +221,8 @@ function openHelp() {
     <p class="note">${esc(t("tierExplain"))}</p>
     <h3>${esc(t("europeTitle"))}</h3><p class="note">${esc(t("europeRule"))}</p>
     <h3>${esc(t("rarityTitle"))}</h3><p class="note">${esc(t("rarityExplain"))}</p>
-    <h3>${esc(t("fairTitle"))}</h3><p class="note">${esc(t(Net.kind === "server" ? "fairServer" : "fairPage"))}</p>`);
+    <h3>${esc(t("fairTitle"))}</h3><p class="note">${esc(t(Net.kind === "server" ? "fairServer" : "fairPage"))}</p>
+    <h3>${esc(t("creditsTitle"))}</h3><p class="note">${esc(t("credits"))}</p>`);
 }
 function openSettings() {
   dialog(`<h2>${esc(t("settings"))}</h2>
@@ -233,7 +234,7 @@ function openSettings() {
       <label class="radio"><input type="checkbox" id="set-sound" ${SETTINGS.sound ? "checked" : ""}><span>${esc(t("soundSetting"))}</span></label>
       <label class="field"><span>${esc(t("yourName"))}</span><input id="set-name" maxlength="20" value="${esc(SETTINGS.name)}" placeholder="${esc(t("namePlaceholder"))}"></label>
       <div class="row"><button class="go" id="set-save" type="submit">${esc(t("save"))}</button><button class="go alt" id="set-tutorial" type="button">${esc(t("showTutorial"))}</button></div>
-    </form>`);
+    </form>${Net.kind === "server" ? `<h3>${esc(t("reminder"))}</h3><p class="note">${esc(t("reminderNote"))}</p><p><a class="go alt" id="set-remind" href="api/reminder.ics?h=9" download="back-road-europe.ics">${esc(t("reminderLink"))}</a></p>` : ""}`);
 }
 function streakNow() {
   const h = STORE.hist, today = cetNow().day; let d = h[today] && !h[today].late ? today : today - 1, n = 0;

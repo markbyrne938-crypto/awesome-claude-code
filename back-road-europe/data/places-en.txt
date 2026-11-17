@@ -349,3 +349,5 @@ UA | Chuhuyiv = Chuhuiv | Chuhuyiv
 FR | Dunkerque = Dunkirk | Dunkerque
 DE | Ludwigshafen am Rhein = Ludwigshafen | Ludwigshafen am Rhein
 DE | Albstadt = Albstadt | Ebingen
+MK | Арачиново = Aračinovo | Arachinovo
+AZ | Əhmədbəyli = Ahmadbeyli | Ahmadbayli, Əhmədbəyli
