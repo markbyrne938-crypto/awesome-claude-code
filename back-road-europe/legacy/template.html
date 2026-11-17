@@ -1,0 +1,354 @@
+<title>Back Road Europe</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Overpass:ital,wght@0,500;0,700;0,900;1,500&family=Overpass+Mono:wght@500;700&family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: a road-atlas sheet beside a run of road signs. The map is the hero; it pans from city to city as you drive. */
+:root {
+  --bg: #edf0f2;
+  --surface: #ffffff;
+  --ink: #15202b;
+  --muted: #566573;
+  --border: #c3ccd4;
+  --sign: #1b4b9b;
+  --sign-ink: #ffffff;
+  --eroad: #1c7449;
+  --marking: #f2c230;
+  --marking-ink: #2a2100;
+  --bad: #b93a2c;
+  --sea: #c6dbe8;
+  --sea-ink: #6f93aa;
+  --land: #f7f5ee;
+  --land-edge: #8fa2ae;
+  --frontier: #c9c3b4;
+  --grat: #b2cbdb;
+  --road: #2b3440;
+  --odo: #1a222b;
+  --display: "Overpass", "Helvetica Neue", Arial, sans-serif;
+  --body: "Figtree", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Overpass Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f141a; --surface: #1f2831; --ink: #eef2f5; --muted: #9ba8b4; --border: #35414d;
+    --sign: #2456ad; --sign-ink: #ffffff; --eroad: #2c9462; --marking: #f2c230; --marking-ink: #2a2100; --bad: #e2675a;
+    --sea: #121d28; --sea-ink: #4d6a80; --land: #27323d; --land-edge: #5b6c7a; --frontier: #3d4a57; --grat: #1c2b39;
+    --road: #0a0e12; --odo: #05080b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f141a; --surface: #1f2831; --ink: #eef2f5; --muted: #9ba8b4; --border: #35414d;
+  --sign: #2456ad; --sign-ink: #ffffff; --eroad: #2c9462; --marking: #f2c230; --marking-ink: #2a2100; --bad: #e2675a;
+  --sea: #121d28; --sea-ink: #4d6a80; --land: #27323d; --land-edge: #5b6c7a; --frontier: #3d4a57; --grat: #1c2b39;
+  --road: #0a0e12; --odo: #05080b; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: var(--body); font-size: 16px; line-height: 1.5;
+  padding-block: 18px 40px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1160px; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
+
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; }
+h1 { font-family: var(--display); font-weight: 900; font-size: clamp(1.5rem, 4vw, 2.1rem); line-height: 1; margin: 0; text-transform: uppercase; letter-spacing: -0.01em; }
+h1 span { color: var(--sign); }
+:root[data-theme="dark"] h1 span { color: var(--marking); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) h1 span { color: var(--marking); } }
+.dash { display: flex; align-items: center; gap: 12px; }
+.mode { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.odo { display: flex; align-items: center; gap: 2px; background: var(--odo); padding: 4px 8px 4px 4px; border-radius: 5px; }
+.odo b { font-family: var(--mono); font-weight: 700; font-size: 1.05rem; color: #ffffff; background: #2f3a46; width: 1.15em; text-align: center; border-radius: 2px; line-height: 1.5; }
+.odo i { font-family: var(--mono); font-style: normal; font-size: 0.7rem; color: var(--marking); margin-left: 6px; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 860px) { .layout { grid-template-columns: minmax(0, 1fr); gap: 14px; } }
+
+/* map */
+.map { position: relative; aspect-ratio: 10 / 9; max-width: 100%; background: var(--sea); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+@media (max-width: 860px) { .map { aspect-ratio: 4 / 3; } }
+@media (min-width: 861px) { .map { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); } }
+.map svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.grat { fill: none; stroke: var(--grat); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.land { fill: var(--land); stroke: var(--land-edge); stroke-width: 0.9; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.frontier { fill: none; stroke: var(--frontier); stroke-width: 0.8; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.sea-name { fill: var(--sea-ink); font-family: var(--display); font-style: italic; font-weight: 500; font-size: 12px; letter-spacing: 0.2em; text-anchor: middle; text-transform: uppercase; }
+.casing { fill: none; stroke: var(--road); stroke-width: 7; vector-effect: non-scaling-stroke; stroke-linecap: round; stroke-linejoin: round; }
+.centre { fill: none; stroke: var(--marking); stroke-width: 1.6; stroke-dasharray: 7 6; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.dot { stroke: #ffffff; vector-effect: non-scaling-stroke; stroke-width: 2; }
+.dot.ok { fill: var(--eroad); } .dot.no { fill: var(--bad); } .dot.home { fill: var(--road); }
+.dot.up { fill: var(--land); stroke: var(--land-edge); stroke-width: 1.2; }
+.dot.car { fill: var(--marking); stroke: var(--road); }
+.ring { fill: none; stroke: var(--marking); stroke-width: 3; vector-effect: non-scaling-stroke; }
+.ring2 { fill: none; stroke: var(--road); stroke-width: 6; vector-effect: non-scaling-stroke; opacity: .85; }
+.lbl { font-family: var(--display); font-weight: 700; fill: var(--ink); stroke: var(--land); paint-order: stroke; stroke-linejoin: round; dominant-baseline: middle; }
+@media (prefers-reduced-motion: no-preference) {
+  .ring { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 50% { opacity: .35; } }
+}
+.tag { position: absolute; left: 10px; right: 10px; display: flex; justify-content: space-between; gap: 8px; pointer-events: none; font-family: var(--mono); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; }
+.tag.top { top: 10px; } .tag.bot { bottom: 10px; }
+.tag span { background: var(--odo); color: #ffffff; padding: 3px 8px 2px; border-radius: 4px; min-width: 0; }
+.tag span:empty { display: none; }
+.tag .y { background: var(--marking); color: var(--marking-ink); }
+
+/* panel */
+.panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.stops { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; list-style: none; margin: 0; padding: 0; }
+.stops li { height: 6px; border-radius: 3px; background: var(--border); }
+.stops li.ok { background: var(--eroad); } .stops li.no { background: var(--bad); } .stops li.now { background: var(--marking); }
+
+.sign { background: var(--sign); color: var(--sign-ink); border-radius: 12px; padding: 6px; }
+.sign-inner { border: 2px solid var(--sign-ink); border-radius: 7px; padding: 18px 18px 22px; display: flex; flex-direction: column; gap: 12px; }
+.eroad { align-self: flex-start; background: var(--eroad); color: #ffffff; border: 2px solid #ffffff; border-radius: 4px; font-family: var(--display); font-weight: 700; font-size: 0.85rem; padding: 2px 8px 0; letter-spacing: 0.04em; }
+.q { font-family: var(--display); font-weight: 700; font-size: clamp(1.2rem, 2.4vw, 1.5rem); line-height: 1.2; margin: 0; text-wrap: balance; }
+
+.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.opt {
+  min-width: 0; text-align: left; cursor: pointer; background: var(--surface); color: var(--ink);
+  border: 2px solid var(--ink); border-radius: 7px; padding: 12px 12px 10px;
+  font-family: var(--display); font-weight: 500; font-size: 1.02rem; line-height: 1.2;
+  display: flex; align-items: center; gap: 10px; overflow-wrap: anywhere;
+}
+.opt kbd { font-family: var(--mono); font-size: 0.72rem; color: var(--muted); border: 1px solid var(--border); border-radius: 3px; padding: 0 5px; flex: none; }
+@media (hover: hover) {
+  .opt:hover:not(:disabled) { background: var(--marking); color: var(--marking-ink); border-color: var(--marking-ink); }
+  .opt:hover:not(:disabled) kbd { color: var(--marking-ink); border-color: var(--marking-ink); }
+}
+.opt:disabled { cursor: default; opacity: .5; }
+.opt.right { background: var(--eroad); color: #ffffff; border-color: var(--eroad); opacity: 1; }
+.opt.wrong { background: var(--bad); color: #ffffff; border-color: var(--bad); opacity: 1; }
+.opt.right kbd, .opt.wrong kbd { color: #ffffff; border-color: #ffffff; }
+button:focus-visible { outline: 3px solid var(--marking); outline-offset: 2px; }
+
+.after { display: flex; gap: 14px; align-items: center; justify-content: space-between; flex-wrap: wrap; min-height: 48px; }
+.fact { margin: 0; flex: 1 1 240px; min-width: 0; color: var(--muted); }
+.fact b { color: var(--ink); }
+.go { cursor: pointer; border: 0; border-radius: 7px; background: var(--marking); color: var(--marking-ink); font-family: var(--display); font-weight: 700; font-size: 1rem; padding: 12px 20px 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+.go.alt { background: transparent; color: var(--ink); border: 2px solid var(--ink); padding: 10px 18px 8px; }
+.note { font-size: 0.85rem; color: var(--muted); margin: 0; }
+
+/* end */
+.big { font-family: var(--display); font-weight: 900; font-size: clamp(2.4rem, 6vw, 3.4rem); line-height: 1; margin: 0; font-variant-numeric: tabular-nums; }
+.big small { font-size: 1rem; font-weight: 700; opacity: .85; white-space: nowrap; }
+.verdict { margin: 0; font-size: 1.05rem; }
+.itin { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.itin li { display: grid; grid-template-columns: 1.4em minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.itin .m { font-weight: 700; } .itin .m.ok { color: var(--eroad); } .itin .m.no { color: var(--bad); }
+.itin .c { font-family: var(--display); font-weight: 700; } .itin .c small { font-family: var(--body); font-weight: 400; color: var(--muted); font-size: 0.85rem; }
+.itin .k { font-family: var(--mono); font-size: 0.8rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.itin .k.lost { text-decoration: line-through; }
+.row { display: flex; gap: 10px; flex-wrap: wrap; }
+#sharebox { width: 100%; font-family: var(--mono); }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Back Road <span>Europe</span></h1>
+    <div class="dash">
+      <span class="mode" id="mode"></span>
+      <div class="odo" id="odo" aria-label="Kilometres earned"></div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="map" id="map">
+      <svg id="svg" role="img" aria-label="Map of Europe showing your route"><g id="base"></g><g id="dyn"></g></svg>
+      <div class="tag top"><span id="tagL"></span><span id="tagR" class="y"></span></div>
+      <div class="tag bot"><span id="tagB"></span></div>
+    </div>
+    <div class="panel">
+      <ol class="stops" id="stops" aria-label="Stops"></ol>
+      <main id="stage"></main>
+      <p class="note">You set off from Dublin and call at ten places. The pin on the map is your clue. Answer correctly and the kilometres of that leg go on the clock. Keys 1–4 answer, Enter drives on.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+const D = __DATA__;
+const N = 10, MX = D.MX, MY = D.MY;
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmt = n => Math.round(n).toLocaleString("en-IE");
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+$("base").innerHTML =
+  `<path class="grat" d="${D.grat}"/><path class="land" d="${D.land}"/><path class="frontier" d="${D.borders}"/>` +
+  D.seas.map(s => `<text class="sea-name" x="${s.x}" y="${s.y}">${esc(s.t)}</text>`).join("");
+
+function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+  t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+function shuffle(a, r) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function todaySeed() { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
+function km(a, b) { const R = 6371, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lon - a.lon) * r;
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); }
+function coord(p) { return `${Math.abs(p.lat).toFixed(2)}°${p.lat >= 0 ? "N" : "S"} ${Math.abs(p.lon).toFixed(2)}°${p.lon >= 0 ? "E" : "W"}`; }
+
+let S, trip, vb, legT = 1, raf;
+
+function build() {
+  const r = rng(S.seed);
+  let pool = shuffle(D.q, r).slice(0, N), here = D.start;
+  trip = [];
+  while (pool.length) { // order the stops so the drive makes sense: always the nearest place next
+    pool.sort((a, b) => km(here, a) - km(here, b));
+    const p = pool.shift();
+    trip.push({ ...p, leg: Math.round(km(here, p)), opts: shuffle([p.a, ...p.w], r) });
+    here = p;
+  }
+}
+const earned = () => S.results.reduce((s, ok, i) => s + (ok ? trip[i].leg : 0), 0);
+const total = () => trip.reduce((s, t) => s + t.leg, 0);
+
+function frame(pts) {
+  const el = $("map"), AR = (el.clientWidth / el.clientHeight) || 1.1, pad = 90;
+  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+  const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  let w = Math.max(x1 - x0 + 2 * pad, (y1 - y0 + 2 * pad) * AR, 400);
+  w = Math.min(w, D.W + 2 * MX, (D.H + 2 * MY) * AR);
+  const h = w / AR;
+  return { x: clamp((x0 + x1) / 2 - w / 2, -MX, D.W + MX - w), y: clamp((y0 + y1) / 2 - h / 2, -MY, D.H + MY - h), w, h };
+}
+function view() {
+  if (S.idx >= N) return frame([D.start, ...trip]);
+  return frame([S.idx ? trip[S.idx - 1] : D.start, trip[S.idx]]);
+}
+function travel() { // pan the map and draw the new leg
+  const to = view(), from = vb || frame([D.start, ...D.q]), t0 = performance.now(), dur = reduced ? 0 : 1200;
+  cancelAnimationFrame(raf);
+  const step = now => {
+    const t = dur ? clamp((now - t0) / dur, 0, 1) : 1, e = t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    vb = { x: lerp(from.x, to.x, e), y: lerp(from.y, to.y, e), w: lerp(from.w, to.w, e), h: lerp(from.h, to.h, e) };
+    legT = e; draw();
+    if (t < 1) raf = requestAnimationFrame(step);
+  };
+  step(t0);
+}
+
+function draw() {
+  const svg = $("svg"), k = vb.w / ($("map").clientWidth || 600);
+  svg.setAttribute("viewBox", `${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}`);
+  const pts = [D.start, ...trip], done = Math.min(S.idx, N), live = S.idx < N;
+  const line = pts.slice(0, done + 1).map(p => `${p.x},${p.y}`);
+  let head = null;
+  if (live) { const a = pts[done], b = pts[done + 1]; head = { x: lerp(a.x, b.x, legT), y: lerp(a.y, b.y, legT) }; line.push(`${head.x.toFixed(1)},${head.y.toFixed(1)}`); }
+  const lbl = (p, t) => { const left = p.x > vb.x + vb.w * 0.72;
+    return `<text class="lbl" x="${p.x + (left ? -11 : 11) * k}" y="${p.y + k}" font-size="${13 * k}" stroke-width="${3.5 * k}" text-anchor="${left ? "end" : "start"}">${esc(t)}</text>`; };
+  const dot = (p, c, r) => `<circle class="dot ${c}" cx="${p.x}" cy="${p.y}" r="${r * k}"/>`;
+  let h = "";
+  for (let i = S.idx + 1; i < N; i++) h += dot(trip[i], "up", 3.5);
+  h += `<polyline class="casing" points="${line.join(" ")}"/><polyline class="centre" points="${line.join(" ")}"/>`;
+  h += dot(D.start, "home", 5) + lbl(D.start, D.start.p);
+  for (let i = 0; i < done; i++) h += dot(trip[i], S.results[i] ? "ok" : "no", 6.5) + lbl(trip[i], trip[i].p);
+  if (live) {
+    const t = trip[S.idx];
+    if (S.picked !== null) h += dot(t, S.results[S.idx] ? "ok" : "no", 7.5) + lbl(t, t.p);
+    else {
+      h += `<circle class="ring2" cx="${t.x}" cy="${t.y}" r="${11 * k}"/><circle class="ring" cx="${t.x}" cy="${t.y}" r="${11 * k}"/>`;
+      h += dot(head, "car", 5.5);
+    }
+  }
+  $("dyn").innerHTML = h;
+}
+
+function renderChrome() {
+  $("stops").innerHTML = Array.from({ length: N }, (_, i) =>
+    `<li class="${i < S.results.length ? (S.results[i] ? "ok" : "no") : i === S.idx ? "now" : ""}"></li>`).join("");
+  $("odo").innerHTML = String(earned()).padStart(5, "0").split("").map(d => `<b>${d}</b>`).join("") + "<i>km</i>";
+  $("mode").textContent = S.daily ? "Today's route" : "Free drive";
+  if (S.idx >= N) { $("tagL").textContent = "Route complete"; $("tagR").textContent = `${fmt(total())} km`; $("tagB").textContent = ""; return; }
+  const t = trip[S.idx];
+  $("tagL").textContent = `Stop ${String(S.idx + 1).padStart(2, "0")} / ${N}`;
+  $("tagR").textContent = `Leg ${fmt(t.leg)} km`;
+  $("tagB").textContent = S.picked !== null ? `${t.p}, ${t.c} · ${coord(t)}` : coord(t);
+}
+
+function render(moving) {
+  renderChrome();
+  if (moving) travel(); else draw();
+  if (S.idx >= N) return renderEnd();
+  const t = trip[S.idx], done = S.picked !== null, ok = done && S.results[S.idx];
+  $("stage").innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <section class="sign"><div class="sign-inner">
+        <span class="eroad">E ${String(S.idx + 1).padStart(2, "0")}</span>
+        <h2 class="q">${esc(t.q)}</h2>
+      </div></section>
+      <div class="opts">${t.opts.map((o, i) => {
+        const cls = done ? (o === t.a ? "right" : o === S.picked ? "wrong" : "") : "";
+        return `<button class="opt ${cls}" id="opt${i}" data-o="${esc(o)}" ${done ? "disabled" : ""}><kbd>${i + 1}</kbd><span>${esc(o)}</span></button>`;
+      }).join("")}</div>
+      <div class="after" aria-live="polite">${done ? `
+        <p class="fact"><b>${ok ? `Right. +${fmt(t.leg)} km.` : `Wrong turn. It's ${esc(t.a)}.`}</b> ${esc(t.f)}</p>
+        <button class="go" id="next">${S.idx === N - 1 ? "Finish" : "Drive on"}</button>` : ""}</div>
+    </div>`;
+  if (done) $("next").focus({ preventScroll: true });
+}
+
+function pick(o) {
+  if (S.picked !== null || S.idx >= N) return;
+  S.picked = o; S.results.push(o === trip[S.idx].a); render(false);
+}
+function next() { if (S.picked === null) return; S.idx++; S.picked = null; render(true); }
+function newTrip(daily) {
+  S = { seed: daily ? todaySeed() : (Math.random() * 2 ** 31) | 0, daily, idx: 0, results: [], picked: null };
+  build(); render(true);
+}
+
+function shareText() {
+  const score = S.results.filter(Boolean).length;
+  return `Back Road Europe ${S.daily ? "(today's route)" : "(free drive)"}\n${fmt(earned())} of ${fmt(total())} km · ${score}/${N}\n` +
+    S.results.map(r => r ? "🟩" : "🟥").join("");
+}
+function renderEnd() {
+  const score = S.results.filter(Boolean).length;
+  const verdict = score === 10 ? "A clean run. Not one wrong turn." :
+    score >= 8 ? "You know your way round the continent." :
+    score >= 5 ? "A few wrong turns, but you got somewhere." :
+    "You spent most of that trip reversing out of dead ends.";
+  $("stage").innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <section class="sign"><div class="sign-inner">
+        <span class="eroad">Journey's end</span>
+        <p class="big">${fmt(earned())} <small>of ${fmt(total())} km &nbsp;·&nbsp; ${score}/${N}</small></p>
+        <p class="verdict">${verdict}</p>
+      </div></section>
+      <ol class="itin">${trip.map((t, i) => `<li>
+        <span class="m ${S.results[i] ? "ok" : "no"}">${S.results[i] ? "✓" : "✗"}</span>
+        <span class="c">${esc(t.p)} <small>${esc(t.c)}</small></span>
+        <span class="k ${S.results[i] ? "" : "lost"}">${fmt(t.leg)} km</span></li>`).join("")}</ol>
+      <div class="row">
+        <button class="go" id="copy">Copy result</button>
+        <button class="go alt" id="again">New random route</button>
+      </div>
+      <textarea id="sharebox" hidden readonly rows="3"></textarea>
+    </div>`;
+}
+
+$("stage").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  if (b.classList.contains("opt")) pick(b.dataset.o);
+  else if (b.id === "next") next();
+  else if (b.id === "again") newTrip(false);
+  else if (b.id === "copy") {
+    const txt = shareText(), fallback = () => { const s = $("sharebox"); s.hidden = false; s.value = txt; s.select(); };
+    try { navigator.clipboard.writeText(txt).then(() => { b.textContent = "Copied"; }, fallback); } catch { fallback(); }
+  }
+});
+document.addEventListener("keydown", e => {
+  if (!S || S.idx >= N) return;
+  if (S.picked === null && e.key >= "1" && e.key <= "4") pick(trip[S.idx].opts[+e.key - 1]);
+  else if (e.key === "Enter" && S.picked !== null && document.activeElement?.id !== "next") next();
+});
+addEventListener("resize", () => { if (S) { cancelAnimationFrame(raf); vb = view(); legT = 1; draw(); } });
+
+function start(saved) {
+  if (saved && saved.seed != null && Array.isArray(saved.results)) { S = saved; build(); render(true); } else newTrip(true);
+}
+window.claude?.hot?.snapshot?.(() => S);
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+</script>

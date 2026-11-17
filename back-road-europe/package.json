@@ -1,0 +1,26 @@
+{
+  "name": "back-road-europe",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A daily Europe game: timed prompts with many right answers, where the least obvious answer scores most.",
+  "scripts": {
+    "fetch": "node tools/fetch-data.mjs",
+    "build": "node build.mjs",
+    "test": "node test/run.cjs"
+  },
+  "dependencies": {
+    "all-the-cities": "^3.1.0",
+    "d3-geo": "^3.1.1",
+    "d3-geo-projection": "^4.0.0",
+    "i18n-iso-countries": "^7.14.0",
+    "topojson-client": "^3.1.0",
+    "topojson-server": "^3.0.1",
+    "topojson-simplify": "^3.0.3",
+    "world-atlas": "^2.0.2",
+    "world-countries": "^5.1.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.2"
+  }
+}
