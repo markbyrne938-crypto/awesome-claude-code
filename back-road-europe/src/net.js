@@ -78,6 +78,13 @@ async function pruneResults() {
   if (old.length) serial("scores", () => Net.db.doc(`scores/${Net.me.id}`).set({ ...mine, id: undefined, days: Object.fromEntries(Object.entries(mine.days).filter(([d]) => +d >= cut)) })).catch(() => {});
 }
 
+// A friend without a Claude account: the owner adds their result from their challenge link.
+const guestId = name => "g_" + hashStr(String(name).trim().toLowerCase()).toString(36);
+async function addGuest(name, day, entry) {
+  if (Net.kind !== "artifact") return;
+  return serial("scores", () => upsert(`scores/${guestId(name)}`, { v: 2, guest: true, name: String(name).trim().slice(0, 20), days: { [day]: entry } }));
+}
+
 /* ---------- real rarity: counts of what players answered on earlier days ---------- */
 function countAnswers(pids, beforeDay) {
   const want = new Set(pids), out = {};
@@ -141,6 +148,7 @@ async function deleteBank(id) {
 /* ---------- names ---------- */
 const NAMES = {};
 async function resolveNames(ids) {
+  for (const id of ids) if (id && /^g_/.test(id)) NAMES[id] = (Net.results.find(r => r.id === id) || {}).name || ""; // friends without an account
   const need = ids.filter(id => id && !(id in NAMES));
   if (need.length && Net.profiles) { const ps = await Net.profiles(need); for (const id of need) NAMES[id] = (ps[id] && ps[id].name) || ""; }
   if (need.length && Net.kind === "server") for (const id of need) NAMES[id] = (Net.results.find(r => r.id === id) || {}).name || "";

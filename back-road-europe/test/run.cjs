@@ -277,6 +277,33 @@ async function playRoute(page, pick = (P, i) => Math.min(P.items.length - 1, 2 +
     await A.ctx.close(); await B.ctx.close(); await C.ctx.close();
   }
 
+  /* ---------- a friend without a Claude account ---------- */
+  {
+    const host = createHost();
+    const O = await fresh(browser, { host }, { id: "u_own", name: "Owner", owner: true });
+    await skipTutorial(O.page); await playRoute(O.page);
+    const F = await fresh(browser); // no host: not signed in, scores stay on the device
+    await skipTutorial(F.page); await playRoute(F.page, (P, i) => Math.max(0, P.items.length - 1 - i));
+    const f = await F.page.evaluate(() => { openTables(); const note = $("dlg").textContent; closeDialog(); return { kind: Net.kind, code: makeCode(RUN, "Dana"), pts: summarise(RUN).pts, note }; });
+    check("guest: a friend without an account plays on this device and is told how to share", f.kind === "local" && /challenge link/.test(f.note));
+    await O.page.evaluate(code => takeChallenge(parseCode(code)), f.code);
+    await O.page.waitForSelector("#guest-form", { timeout: 5000 }).catch(() => {});
+    const box = await O.page.evaluate(() => $("guest-name") && $("guest-name").value);
+    check("guest: the owner is offered to add them, with their name filled in", box === "Dana", String(box));
+    await O.page.click("#guest-form button");
+    await sleep(800);
+    const doc = [...host.docs.entries()].find(([k]) => /^scores\/g_/.test(k));
+    const day = await O.page.evaluate(() => RUN.day);
+    check("guest: their result is saved to the shared tables without today's answers", doc && doc[1].name === "Dana" && doc[1].days[day].pts === f.pts && doc[1].days[day].ans === null, JSON.stringify(doc));
+    await O.page.evaluate(() => openTables("today")); await sleep(400);
+    const rows = await O.page.evaluate(() => [...document.querySelectorAll("#dlg .tb-row")].map(r => r.textContent));
+    check("guest: they appear by name on today's table", rows.length === 2 && rows.some(r => r.includes("Dana") && r.includes(String(f.pts))), JSON.stringify(rows));
+    await O.page.evaluate(() => { closeDialog(); renderVersus(); }); await sleep(300);
+    check("guest: the offer turns into a note once they're on", await O.page.evaluate(() => !$("guest-form") && /Dana is on the tables/.test($("versus").textContent)));
+    check("guest: no script errors", O.page.errors.length === 0 && F.page.errors.length === 0, [...O.page.errors, ...F.page.errors].join(" | "));
+    await O.ctx.close(); await F.ctx.close();
+  }
+
   await browser.close();
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

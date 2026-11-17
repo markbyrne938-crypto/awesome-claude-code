@@ -75,12 +75,13 @@ The owner can also schedule a prompt for a future day from inside the game (the 
 npm test
 ```
 
-- **`test/run.cjs`** (168 checks) uses a stand-in for the artifact host, so two or more browser pages share one store. It covers:
+- **`test/run.cjs`** (174 checks) uses a stand-in for the artifact host, so two or more browser pages share one store. It covers:
   - matching, the deal over 200 days, scoring and challenge codes
   - translations and colour contrast in both themes
   - a full route, plus resume after reload
   - layouts at seven screen widths
   - two-player tables, hidden answers, owner scheduling and a live duel
+  - adding a friend without an account to the tables
 - **`test/server.cjs`** (24 checks) starts the real server with a throwaway database and plays through it in two browsers.
 
 Screenshots go to `test/out/`.
@@ -114,7 +115,9 @@ PORT=8080 npm start
 
 ## Limits of the artifact version
 
-- **Shared storage.** Only people with access to the artifact can post to the shared tables. Everyone else can still play, and compare by challenge link or result code.
+- **Shared storage.** Only signed-in people with access to the artifact can post to the shared tables.
+  - Anyone else can play from a public link, and their scores stay on their device.
+  - They send the owner their challenge link, which shows a side-by-side comparison. From there, the owner can add them to the tables by name with one button.
 - **Integrity.**
   - The page stores answers privately, so a run can't be replayed after a reload.
   - Today's answers stay hidden until midnight.

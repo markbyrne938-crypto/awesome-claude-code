@@ -5,7 +5,7 @@ const DUEL = { on: false, seed: 0, with: null, peers: [], myPeer: null, invite: 
 function rivalsFor(r) {
   const out = [];
   const code = r.rival ? parseCode(r.rival) : null;
-  if (code && code.pids.join() === r.pids.join()) out.push({ name: code.name || t("yourFriend"), sum: summarise({ ...r, ans: code.ans }), verified: code.verified, mode: code.mode });
+  if (code && code.pids.join() === r.pids.join()) out.push({ name: code.name || t("yourFriend"), sum: summarise({ ...r, ans: code.ans }), verified: code.verified, mode: code.mode, code });
   if (r.type === "duel" && DUEL.opp && DUEL.opp.ans) out.push({ name: DUEL.oppName || t("opponent"), sum: summarise({ ...r, ans: DUEL.opp.ans }), live: true });
   if ((r.type === "daily" || r.type === "archive") && Net.results.length) {
     for (const res of Net.results) {
@@ -31,6 +31,7 @@ async function renderVersus() {
       <h3>${esc(head(x))}</h3>${x.verified === false ? `<p class="note">${esc(t("unverified"))}</p>` : ""}${x.mode && x.mode !== r.mode ? `<p class="note">${esc(t("modeDiff", { m: t("mode_" + x.mode) }))}</p>` : ""}
       <div class="vs-head"><span>${esc(t("you"))} · ${me.pts}</span><span>${esc(x.name)} · ${x.sum.pts}</span></div>
       ${me.rows.map((row, i) => `<div class="vs-q">${esc(promptText(row.P))}</div><div class="vs-row">${cell(row)}${cell(x.sum.rows[i])}</div>`).join("")}
+      ${x.code ? guestBox(x, r) : ""}
     </section>`).join("");
   const table = rivals.filter(x => x.shared);
   const tableHtml = table.length ? `<section class="vs"><h3>${esc(t(r.day === cetNow().day ? "todayTable" : "routeTable"))}</h3>
@@ -38,6 +39,24 @@ async function renderVersus() {
     ${r.day === cetNow().day ? `<p class="note">${esc(t("answersAtMidnight"))}</p>` : ""}</section>` : "";
   const hint = !duels && !table.length ? `<p class="note">${esc(t(Net.kind === "local" ? "compareHintLocal" : "compareHint"))}</p>` : "";
   el.innerHTML = duels + tableHtml + hint;
+}
+
+// The owner can put a friend without an account on the shared tables, from their challenge link.
+function guestBox(x, r) {
+  if (Net.kind !== "artifact" || !Net.owner || x.verified === false || x.code.type !== "daily" || !(r.type === "daily" || r.type === "archive")) return "";
+  const on = x.code.name && Net.results.some(res => res.id === guestId(x.code.name) && res.days && res.days[r.day]);
+  if (on) return `<p class="note">${esc(t("guestOn", { x: x.code.name }))}</p>`;
+  return `<form class="ask" id="guest-form" autocomplete="off"><input id="guest-name" maxlength="20" value="${esc(x.code.name || "")}" placeholder="${esc(t("guestName"))}" aria-label="${esc(t("guestName"))}"><button class="go alt">${esc(t("guestAdd"))}</button></form>
+    <p class="msg" id="guest-msg"></p><p class="note">${esc(t("guestNote"))}</p>`;
+}
+function submitGuest() {
+  const r = RUN, c = r && r.rival ? parseCode(r.rival) : null, name = $("guest-name").value.trim();
+  if (!c || c.type !== "daily" || c.pids.join() !== r.pids.join()) return;
+  if (!name) { $("guest-msg").textContent = t("guestNeedName"); return; }
+  const s = summarise({ ...r, ans: c.ans });
+  // Today's answers stay off the shared tables until the route closes, like everyone else's.
+  const entry = { pts: s.pts, tiers: s.tiers, ms: s.ms, mode: c.mode, late: false, pids: c.pids, ans: c.day < cetNow().day ? c.ans.map(a => a.k) : null, at: now(), guest: true };
+  addGuest(name, c.day, entry).then(() => { toast(t("guestAdded", { x: name })); }).catch(() => { $("guest-msg").textContent = t("saveFailed"); });
 }
 
 /* ---------- posting and revealing ---------- */

@@ -151,6 +151,7 @@ document.addEventListener("submit", e => {
     setLang(lang); saveAll(); closeDialog(); staticTexts(); netRename(SETTINGS.name);
     if (RUN && RUN.phase === "intro") RUN.mode = timer;
     show("");
+  } else if (id === "guest-form") { submitGuest();
   } else if (id === "rival-form") {
     const c = parseCode($("rival-code").value);
     if (!c) { $("rival-msg").textContent = t("badCode"); return; }
