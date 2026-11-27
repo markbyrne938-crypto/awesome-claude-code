@@ -569,12 +569,17 @@ async function syncNow() {
     const r = await fetch(SYNC_URL + syncKey, { cache: 'no-store', referrerPolicy: 'no-referrer' });
     if (!r.ok) throw new Error('get ' + r.status);
     const raw = (await r.text()).trim();
-    let remote = [], plain = false;
-    if (raw.startsWith('enc1:')) remote = parseMarks(await decryptText(key, raw));
-    else if (raw) { remote = parseMarks(raw); plain = true; }   // saved by the older, unencrypted page
+    let remote = [], rewrite = false;
+    if (raw.startsWith('enc1:')) {
+      try { remote = parseMarks(await decryptText(key, raw)); }
+      catch (e) {
+        if (e.name !== 'OperationError') throw e;
+        rewrite = true;   // saved under an earlier password: replace it with this device's ticks
+      }
+    } else if (raw) { remote = parseMarks(raw); rewrite = true; }   // saved by the older, unencrypted page
     if (mergeMarks(remote)) { saveLocal(); render(); }
     const theirs = new Map(remote.map(([id, , t]) => [id, t]));
-    const dirty = plain || [...marks].some(([id, m]) => !theirs.has(id) || theirs.get(id) < m[1]);
+    const dirty = rewrite || [...marks].some(([id, m]) => !theirs.has(id) || theirs.get(id) < m[1]);
     if (dirty) {
       const p = await fetch(SYNC_URL + syncKey, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: await encryptText(key, serializeMarks()), referrerPolicy: 'no-referrer' });
       if (!p.ok) throw new Error('post ' + p.status);
