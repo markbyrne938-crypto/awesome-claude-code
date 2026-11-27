@@ -25,9 +25,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,5 +58,16 @@ jobs:
           cp index.html data.json manifest.webmanifest icon-192.png icon-512.png apple-touch-icon.png ../site/
       - uses: actions/upload-pages-artifact@v5
         with: { path: site }
+
+  # Publishing is its own job: since late November 2026 deploy-pages often can't see an artifact
+  # uploaded a moment earlier in the same job ("No artifacts named github-pages were found").
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
       - id: deploy
         uses: actions/deploy-pages@v5
