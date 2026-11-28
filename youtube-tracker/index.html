@@ -287,7 +287,8 @@ const savePrefs = () => store.set('yt-prefs', JSON.stringify(prefs));
 
 /* ================= unlock ================= */
 async function fetchData() {
-  const r = await fetch('data.json', { cache: 'no-store' });
+  // The query string skips GitHub Pages' CDN cache, which can serve the previous file for ~10 minutes.
+  const r = await fetch('data.json?v=' + Date.now(), { cache: 'no-store' });
   if (!r.ok) throw new Error('data ' + r.status);
   return r.json();
 }
